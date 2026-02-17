@@ -1,4 +1,4 @@
-# About Me 👨‍💻
+# About Me 
 
 Hey, I am Asad a B.Tech student from VIT,I like to code and design apps for web and mobile
  

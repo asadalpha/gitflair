@@ -10,7 +10,7 @@
 - **Fast Ingestion**: Parallel processing and chunking for efficient repository indexing.
 - **Premium UI/UX**: Minimal, dark-themed interface built with Next.js and Framer Motion.
 
-## 🏗 How it Works (RAG Pipeline)
+##  How it Works (RAG Pipeline)
 
 1. **Ingestion**: The user provides a GitHub URL. The backend uses the GitHub API to fetch recursive file trees, filtering for supported source code files.
 2. **Chunking**: Code files are split into logical chunks using LangChain's `RecursiveCharacterTextSplitter`, preserving context and language-specific syntax.
@@ -19,13 +19,13 @@
 5. **Retrieval**: When a user asks a question, the query is embedded and a cosine similarity search is performed to find the most relevant code snippets.
 6. **Generation**: The retrieved snippets and chat history are passed to `gemini-2.5-flash` to generate a grounded, accurate response.
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Frontend**: Next.js (App Router), TailwindCSS, Framer Motion, Lucide React.
 - **Backend**: Next.js API Routes, Supabase (PostgreSQL + pgvector).
 - **AI/LLM**: Google Gemini (Gemini 2.5 Flash/Flash), LangChain for text splitting.
 
-## 🚀 Getting Started
+##  Getting Started
 
 1.  **Clone the repo**:
     ```bash
@@ -49,14 +49,14 @@
 5.  **Access the app**:
     Open [http://localhost:3000](http://localhost:3000)
 
-## � Project Structure
+##  Project Structure
 
 - `src/app`: Next.js pages and API routes.
 - `src/components`: Reusable UI components (Chat, Status, RepoInput).
 - `src/lib`: Core logic for Gemini, GitHub API, and Supabase integration.
 - `src/db`: Database schema and migration files.
 
-## 🛣 Routes
+##  Routes
 
 ### Frontend Pages
 
@@ -72,7 +72,7 @@
 - `POST /api/ask`: Handles natural language questions using RAG (Retrieval Augmented Generation).
 - `GET /api/history?repoId=...`: Fetches chat history for a specific repository.
 
-## �📡 System Status
+##  System Status
 
 Check the live health of all services at [/status](http://localhost:3000/status).
 

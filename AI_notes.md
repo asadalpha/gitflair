@@ -1,4 +1,4 @@
-# AI Notes 🧠
+# AI Notes 
 
 This project was built with a heavy emphasis on AI-driven development. Here is a breakdown of how different AI tools and techniques were utilized.
 
