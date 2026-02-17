@@ -1,8 +1,8 @@
-# GitFlair 
+# GitFlair
 
 **GitFlair** is a premium AI-powered repository intelligence platform. It allows users to index any public GitHub repository and ask natural language questions about the codebase, receiving grounded answers with specific file paths and line ranges.
 
-##  Features
+## Features
 
 - **Semantic Indexing**: Deep code analysis using Google Gemini embeddings and Supabase pgvector storage.
 - **Code-Grounded Q&A**: Get precise answers backed by actual code snippets from the repo.
@@ -10,7 +10,14 @@
 - **Fast Ingestion**: Parallel processing and chunking for efficient repository indexing.
 - **Premium UI/UX**: Minimal, dark-themed interface built with Next.js and Framer Motion.
 
-##  How it Works (RAG Pipeline)
+## 📉 Usage Limits
+
+To ensure fair usage and manage API costs, the following limits are in place:
+
+- **Repositories**: Users can index up to **2 repositories** at a time.
+- **Chats**: Each repository supports up to **10 Q&A interactions**.
+
+## How it Works (RAG Pipeline)
 
 1. **Ingestion**: The user provides a GitHub URL. The backend uses the GitHub API to fetch recursive file trees, filtering for supported source code files.
 2. **Chunking**: Code files are split into logical chunks using LangChain's `RecursiveCharacterTextSplitter`, preserving context and language-specific syntax.
@@ -25,7 +32,7 @@
 - **Backend**: Next.js API Routes, Supabase (PostgreSQL + pgvector).
 - **AI/LLM**: Google Gemini (Gemini 2.5 Flash/Flash), LangChain for text splitting.
 
-##  Getting Started
+## Getting Started
 
 1.  **Clone the repo**:
     ```bash
@@ -49,14 +56,14 @@
 5.  **Access the app**:
     Open [http://localhost:3000](http://localhost:3000)
 
-##  Project Structure
+## Project Structure
 
 - `src/app`: Next.js pages and API routes.
 - `src/components`: Reusable UI components (Chat, Status, RepoInput).
 - `src/lib`: Core logic for Gemini, GitHub API, and Supabase integration.
 - `src/db`: Database schema and migration files.
 
-##  Routes
+## Routes
 
 ### Frontend Pages
 
@@ -72,8 +79,6 @@
 - `POST /api/ask`: Handles natural language questions using RAG (Retrieval Augmented Generation).
 - `GET /api/history?repoId=...`: Fetches chat history for a specific repository.
 
-##  System Status
+## System Status
 
 Check the live health of all services at [/status](http://localhost:3000/status).
-
-

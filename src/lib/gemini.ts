@@ -10,16 +10,36 @@ if (!process.env.GOOGLE_GENAI_API_KEY) {
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GENAI_API_KEY });
 
 /**
+ * Check if the error is a Gemini API quota exceeded (rate limit) error.
+ */
+export function isQuotaExceeded(error: unknown): boolean {
+    if (!error) return false;
+    const msg = error instanceof Error ? error.message : String(error);
+    return (
+        msg.includes("429") ||
+        msg.toLowerCase().includes("quota exceeded") ||
+        msg.toLowerCase().includes("rate limit")
+    );
+}
+
+/**
  * Embed a single query string.
  * Returns a number[] vector (3072 dimensions) suitable for pgvector.
  */
 export async function embedQuery(text: string): Promise<number[]> {
-    const res = await genai.models.embedContent({
-        model: "gemini-embedding-001",
-        contents: text,
-        config: { taskType: "RETRIEVAL_QUERY" },
-    });
-    return res.embeddings?.[0]?.values ?? [];
+    try {
+        const res = await genai.models.embedContent({
+            model: "gemini-embedding-001",
+            contents: text,
+            config: { taskType: "RETRIEVAL_QUERY" },
+        });
+        return res.embeddings?.[0]?.values ?? [];
+    } catch (error) {
+        if (isQuotaExceeded(error)) {
+            throw new Error("Gemini API quota exceeded. Please try again in a minute.");
+        }
+        throw error;
+    }
 }
 
 /**
@@ -32,13 +52,20 @@ export async function embedDocuments(texts: string[]): Promise<number[][]> {
 
     for (let i = 0; i < texts.length; i += BATCH_SIZE) {
         const batch = texts.slice(i, i + BATCH_SIZE);
-        const res = await genai.models.embedContent({
-            model: "gemini-embedding-001",
-            contents: batch,
-            config: { taskType: "RETRIEVAL_DOCUMENT" },
-        });
-        const vectors = (res.embeddings ?? []).map((e) => e.values ?? []);
-        allEmbeddings.push(...vectors);
+        try {
+            const res = await genai.models.embedContent({
+                model: "gemini-embedding-001",
+                contents: batch,
+                config: { taskType: "RETRIEVAL_DOCUMENT" },
+            });
+            const vectors = (res.embeddings ?? []).map((e) => e.values ?? []);
+            allEmbeddings.push(...vectors);
+        } catch (error) {
+            if (isQuotaExceeded(error)) {
+                throw new Error("Gemini API quota exceeded. Please try again in a minute.");
+            }
+            throw error;
+        }
     }
 
     return allEmbeddings;
@@ -84,12 +111,19 @@ ${context}
 
 User question: ${question}`;
 
-    const res = await genai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
-        contents: prompt,
-    });
+    try {
+        const res = await genai.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            contents: prompt,
+        });
 
-    return res.text ?? "I could not find this in the indexed codebase.";
+        return res.text ?? "I could not find this in the indexed codebase.";
+    } catch (error) {
+        if (isQuotaExceeded(error)) {
+            return "Gemini API quota exceeded. Please wait a minute before asking another question.";
+        }
+        throw error;
+    }
 }
 
 // ── Code Chunking ──

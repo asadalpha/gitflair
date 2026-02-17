@@ -5,6 +5,7 @@ import { Send, Loader2, Code2, FileText, ChevronDown, ChevronRight, ExternalLink
 import { motion, AnimatePresence } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { showToast } from '@/components/Toast';
 
 interface Chunk {
     file_path: string;
@@ -98,8 +99,9 @@ export default function ChatInterface({ repoId, repoUrl, userId }: ChatInterface
                 setHiddenChunksMap(prev => ({ ...prev, [messageIndex]: data.chunks }));
                 setExpandedSnippets(prev => ({ ...prev, [messageIndex]: true }));
             }
-        } catch {
-            // silently fail
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to retrieve code snippets';
+            showToast(message, 'error');
         } finally {
             setIsLoading(false);
         }
@@ -133,10 +135,7 @@ export default function ChatInterface({ repoId, repoUrl, userId }: ChatInterface
             }]);
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Something went wrong';
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: `Error: ${message}`
-            }]);
+            showToast(message, 'error');
         } finally {
             setIsLoading(false);
         }

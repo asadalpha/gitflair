@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { GoogleGenAI } from '@google/genai';
+import { isQuotaExceeded } from '@/lib/gemini';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,10 +55,11 @@ export async function GET() {
             details: hasVectors ? 'Gemini API responding' : 'Empty embedding returned',
         };
     } catch (err: unknown) {
+        const quotaExceeded = isQuotaExceeded(err);
         results.llm = {
-            status: 'down',
+            status: quotaExceeded ? 'degraded' : 'down',
             latency: Date.now() - llmStart,
-            details: err instanceof Error ? err.message : 'Connection failed',
+            details: quotaExceeded ? 'Gemini API quota exceeded' : (err instanceof Error ? err.message : 'Connection failed'),
         };
     }
 

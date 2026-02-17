@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseGitHubUrl, fetchRepoContents } from '@/lib/github';
-import { chunkCode, embedDocuments } from '@/lib/gemini';
+import { chunkCode, embedDocuments, isQuotaExceeded } from '@/lib/gemini';
 import { supabase } from '@/lib/supabase';
 
 export async function POST(req: NextRequest) {
@@ -34,6 +34,20 @@ export async function POST(req: NextRequest) {
                 }
             }
         } else {
+            // RATE LIMIT: Max 2 repositories per user
+            const { count: repoCount, error: countError } = await supabase
+                .from('repositories')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', userIdSafe);
+
+            if (countError) throw countError;
+
+            if (repoCount && repoCount >= 2) {
+                return NextResponse.json({
+                    error: 'Limit reached: You can only index up to 2 repositories. Please delete an old repository to index a new one.'
+                }, { status: 403 });
+            }
+
             const { data: newRepo, error: insertRepoError } = await supabase
                 .from('repositories')
                 .insert([{ url, name: repo, full_name: `${owner}/${repo}`, user_id: userIdSafe }])
@@ -113,6 +127,11 @@ export async function POST(req: NextRequest) {
     } catch (error: unknown) {
         console.error('Ingest error:', error);
         const err = error as Error;
+
+        if (isQuotaExceeded(error)) {
+            return NextResponse.json({ error: err.message }, { status: 429 });
+        }
+
         return NextResponse.json({
             error: err.message || 'Internal server error',
             details: err.stack

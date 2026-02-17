@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { embedQuery, chatWithContext } from '@/lib/gemini';
+import { embedQuery, chatWithContext, isQuotaExceeded } from '@/lib/gemini';
 import { supabase, CodeChunk } from '@/lib/supabase';
 
 /**
@@ -25,6 +25,23 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({
                 error: 'Failed to generate query embedding'
             }, { status: 500 });
+        }
+
+        // RATE LIMIT: Max 10 chats per repository per user
+        const { count: chatCount, error: chatCountError } = await supabase
+            .from('qa_history')
+            .select('*', { count: 'exact', head: true })
+            .eq('repo_id', repoId)
+            .eq('user_id', userIdSafe);
+
+        if (chatCountError) {
+            console.error('[ASK] Chat count query error:', chatCountError);
+        }
+
+        if (chatCount && chatCount >= 10) {
+            return NextResponse.json({
+                error: 'Limit reached: You can only have up to 10 chats per repository. Please delete an old repository or index a new one.'
+            }, { status: 403 });
         }
 
         // DIAGNOSTIC: Check if this repo has ANY chunks stored
@@ -132,6 +149,11 @@ export async function POST(req: NextRequest) {
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Internal server error';
         console.error('Ask Route Error:', error);
+
+        if (isQuotaExceeded(error)) {
+            return NextResponse.json({ error: errorMessage }, { status: 429 });
+        }
+
         return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 }
