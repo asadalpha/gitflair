@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GitFlair 
 
-## Getting Started
+**GitFlair** is a premium AI-powered repository intelligence platform. It allows users to index any public GitHub repository and ask natural language questions about the codebase, receiving grounded answers with specific file paths and line ranges.
 
-First, run the development server:
+##  Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Semantic Indexing**: Deep code analysis using Google Gemini embeddings and Supabase pgvector storage.
+- **Code-Grounded Q&A**: Get precise answers backed by actual code snippets from the repo.
+- **Real-time Health Monitoring**: Integrated status dashboard for Backend, Database, and LLM connectivity.
+- **Fast Ingestion**: Parallel processing and chunking for efficient repository indexing.
+- **Premium UI/UX**: Minimal, dark-themed interface built with Next.js and Framer Motion.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🏗 How it Works (RAG Pipeline)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Ingestion**: The user provides a GitHub URL. The backend uses the GitHub API to fetch recursive file trees, filtering for supported source code files.
+2. **Chunking**: Code files are split into logical chunks using LangChain's `RecursiveCharacterTextSplitter`, preserving context and language-specific syntax.
+3. **Embedding**: Each chunk is converted into a 3072-dimensional vector using the `gemini-embedding-001` model.
+4. **Storage**: Vectors and metadata (file paths, line ranges) are stored in Supabase using the `pgvector` extension.
+5. **Retrieval**: When a user asks a question, the query is embedded and a cosine similarity search is performed to find the most relevant code snippets.
+6. **Generation**: The retrieved snippets and chat history are passed to `gemini-2.5-flash` to generate a grounded, accurate response.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🛠 Tech Stack
 
-## Learn More
+- **Frontend**: Next.js (App Router), TailwindCSS, Framer Motion, Lucide React.
+- **Backend**: Next.js API Routes, Supabase (PostgreSQL + pgvector).
+- **AI/LLM**: Google Gemini (Gemini 2.5 Flash/Flash), LangChain for text splitting.
 
-To learn more about Next.js, take a look at the following resources:
+## 🚀 Getting Started
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1.  **Clone the repo**:
+    ```bash
+    git clone https://github.com/your-username/gitflair.git
+    ```
+2.  **Install dependencies**:
+    ```bash
+    npm install
+    ```
+3.  **Set up Environment Variables**:
+    Create a `.env` file based on `.env.example` and add your keys:
+    - `NEXT_PUBLIC_SUPABASE_URL`
+    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+    - `SUPABASE_SERVICE_ROLE_KEY`
+    - `GOOGLE_GENAI_API_KEY`
+    - `GITHUB_TOKEN`
+4.  **Run the development server**:
+    ```bash
+    npm run dev
+    ```
+5.  **Access the app**:
+    Open [http://localhost:3000](http://localhost:3000)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## � Project Structure
 
-## Deploy on Vercel
+- `src/app`: Next.js pages and API routes.
+- `src/components`: Reusable UI components (Chat, Status, RepoInput).
+- `src/lib`: Core logic for Gemini, GitHub API, and Supabase integration.
+- `src/db`: Database schema and migration files.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🛣 Routes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Frontend Pages
+
+- `/`: **Home** - Landing page with repository input and feature overview.
+- `/status`: **System Status** - Real-time health dashboard for all services.
+
+### API Endpoints
+
+- `GET /api/health`: Returns overall system health and service-specific latency.
+- `POST /api/ingest`: Accepts a GitHub URL, fetches code, chunks it, and generates embeddings.
+- `GET /api/repos`: Lists all repositories indexed by the current user.
+- `GET /api/status?url=...`: Checks the indexing status of a specific repository.
+- `POST /api/ask`: Handles natural language questions using RAG (Retrieval Augmented Generation).
+- `GET /api/history?repoId=...`: Fetches chat history for a specific repository.
+
+## �📡 System Status
+
+Check the live health of all services at [/status](http://localhost:3000/status).
+
+

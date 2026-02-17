@@ -5,10 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import RepoInput from '@/components/RepoInput';
 import ChatInterface from '@/components/ChatInterface';
 import HistoryPanel from '@/components/HistoryPanel';
+import StatusBadge from '@/components/StatusPage';
 import { getAnonymousUserId } from '@/lib/user';
 import { showToast } from '@/components/Toast';
 import {
-  Sparkles, Layers, Search, Zap,
+  Sparkles, Search, Zap,
   CheckCircle2, GitBranch, ArrowLeft, Database
 } from 'lucide-react';
 
@@ -41,7 +42,7 @@ export default function Home() {
         const data = await res.json();
         if (Array.isArray(data)) setSavedRepos(data);
       } catch {
-        
+
         console.error('Failed to load repos');
       }
     }
@@ -183,12 +184,7 @@ export default function Home() {
             )}
 
             {/* ── Feature Cards ── */}
-            <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-              <FeatureCard
-                icon={<Layers className="text-blue-400" />}
-                title="Semantic Indexing"
-                description="Deep code analysis with Gemini embeddings and pgvector storage."
-              />
+            <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               <FeatureCard
                 icon={<Search className="text-purple-400" />}
                 title="Code-Grounded Q&A"
@@ -199,6 +195,11 @@ export default function Home() {
                 title="Fast Ingestion"
                 description="Parallel chunking and processing for massive repositories."
               />
+            </div>
+
+            {/* ── Status Badge ── */}
+            <div className="max-w-4xl mx-auto flex justify-center">
+              <StatusBadge />
             </div>
           </motion.div>
         ) : (
