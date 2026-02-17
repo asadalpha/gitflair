@@ -9,15 +9,31 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@google/genai": "^1.41.0",
+    "@langchain/core": "^1.1.24",
+    "@langchain/google-genai": "^2.1.18",
+    "@langchain/textsplitters": "^1.0.1",
+    "@supabase/supabase-js": "^2.95.3",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.34.0",
+    "langchain": "^1.2.24",
+    "lucide-react": "^0.564.0",
     "next": "16.1.6",
+    "octokit": "^5.0.5",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.0",
+    "tailwind-merge": "^3.4.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
