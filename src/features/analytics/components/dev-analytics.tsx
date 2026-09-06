@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     TrendingUp,
     GitCommit,
@@ -42,6 +42,23 @@ export default function DevAnalytics({ repoName, repoUrl }: DevAnalyticsProps) {
     const [needsGithubLink, setNeedsGithubLink] = useState(false);
     const [timeframe, setTimeframe] = useState<'7d' | '30d' | '90d'>('30d');
 
+    const CACHE_KEY = `gitflair_dev_analytics_${repoName || 'global'}`;
+
+    // Auto-load from localStorage on mount or repo change
+    useEffect(() => {
+        try {
+            const cached = localStorage.getItem(CACHE_KEY);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (parsed && parsed.stats) {
+                    setData(parsed);
+                }
+            }
+        } catch {
+            // Ignore storage errors
+        }
+    }, [CACHE_KEY]);
+
     const fetchAnalytics = async () => {
         setLoading(true);
         setError(null);
@@ -59,7 +76,10 @@ export default function DevAnalytics({ repoName, repoUrl }: DevAnalyticsProps) {
                 showToast(json.error, 'error');
             } else {
                 setData(json);
-                showToast('Analytics loaded', 'success');
+                try {
+                    localStorage.setItem(CACHE_KEY, JSON.stringify(json));
+                } catch {}
+                showToast('Analytics updated', 'success');
             }
         } catch {
             setError('Failed to fetch analytics');
@@ -97,7 +117,7 @@ export default function DevAnalytics({ repoName, repoUrl }: DevAnalyticsProps) {
         );
     }
 
-    if (loading) {
+    if (loading && !data) {
         return (
             <div className="flex flex-col items-center justify-center py-20 space-y-3">
                 <Loader2 className="animate-spin text-[#5e6ad2]" size={28} />
@@ -163,9 +183,11 @@ export default function DevAnalytics({ repoName, repoUrl }: DevAnalyticsProps) {
                     </div>
                     <button
                         onClick={fetchAnalytics}
-                        className="text-[10px] text-zinc-500 hover:text-white font-mono px-2 py-1 rounded-lg hover:bg-white/5 transition-colors"
+                        disabled={loading}
+                        className="text-[10px] text-zinc-500 hover:text-white font-mono px-2 py-1 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-1"
+                        title="Refresh analytics"
                     >
-                        ↻
+                        {loading ? <Loader2 className="w-3 h-3 animate-spin text-purple-400" /> : '↻'}
                     </button>
                 </div>
             </div>

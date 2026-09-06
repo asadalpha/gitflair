@@ -70,11 +70,11 @@ export async function POST(req: NextRequest) {
         .where(eq(repository.workspaceId, userWorkspace.id));
 
       const repoCount = Number(repoCountResult[0]?.count ?? 0);
-      if (repoCount >= 1) {
+      if (repoCount >= 3) {
         return NextResponse.json(
           {
             error:
-              "Limit reached: You can only have 1 repository per workspace. Delete it to index a new one.",
+              "Limit reached: You can have up to 3 repositories per workspace. Delete an old repository to index a new one.",
           },
           { status: 403 },
         );

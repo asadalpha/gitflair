@@ -17,11 +17,13 @@ import AIChatView from '@/features/chat/components/ai-chat-view';
 import ProjectsView from '@/features/projects/components/projects-view';
 import NotesPagesView from '@/features/notes/components/notes-pages-view';
 import GithubIssuesPanel from '@/features/issues/components/github-issues-panel';
+import AIToolsView from '@/features/ai-tools/components/ai-tools-view';
 import InboxModal from '@/components/ui/inbox-modal';
 import GithubProfileModal from '@/components/ui/github-profile-modal';
 import TechTriviaModal from '@/components/ui/tech-trivia-modal';
+import AuthModal from '@/components/ui/auth-modal';
 import { getAnonymousUserId } from '@/lib/user';
-import { useSession, signIn } from '@/lib/auth-client';
+import { useSession, signIn, signOut } from '@/lib/auth-client';
 import { showToast } from '@/components/ui/toast';
 import {
     BarChart3,
@@ -43,7 +45,8 @@ import {
     ChevronUp,
     Bot,
     Zap,
-    Shield
+    Shield,
+    LogOut
 } from 'lucide-react';
 
 interface Analysis {
@@ -93,8 +96,8 @@ export default function Home() {
     const isLoggedIn = !!session?.user;
     const noRepo = !repo || !repo.url || repo.id === 'empty-workspace';
 
-    // Tabs navigation: 'dashboard' | 'arch' | 'notes' | 'analytics' | 'chat' | 'pr' | 'projects' | 'notes_pages' | 'issues'
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'arch' | 'notes' | 'analytics' | 'chat' | 'pr' | 'projects' | 'notes_pages' | 'issues'>('chat');
+    // Tabs navigation: 'dashboard' | 'arch' | 'notes' | 'analytics' | 'chat' | 'pr' | 'projects' | 'notes_pages' | 'issues' | 'ai_tools'
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'arch' | 'notes' | 'analytics' | 'chat' | 'pr' | 'projects' | 'notes_pages' | 'issues' | 'ai_tools'>('chat');
 
     // File Inspector drawer state
     const [inspectingFile, setInspectingFile] = useState<string | null>(null);
@@ -103,7 +106,9 @@ export default function Home() {
     const [isReposOverlayOpen, setIsReposOverlayOpen] = useState(false);
     const [isInboxOpen, setIsInboxOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [profileModalTab, setProfileModalTab] = useState<'profile' | 'analytics'>('profile');
     const [isTriviaOpen, setIsTriviaOpen] = useState(false);
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
     // GSAP Refs
     const heroTitleRef = useRef<HTMLHeadingElement>(null);
@@ -121,12 +126,24 @@ export default function Home() {
         }
     }, [session]);
 
+    // Automatically enter workspace when user logs in
+    useEffect(() => {
+        if (isLoggedIn && (!repo || repo.id === 'empty-workspace')) {
+            if (savedRepos.length > 0) {
+                setRepo(savedRepos[0]);
+            } else {
+                setActiveTab('projects');
+            }
+        } else if (!isLoggedIn && repo) {
+            setRepo(null);
+        }
+    }, [isLoggedIn, savedRepos]);
+
     // GSAP Entrance & Floating Animations
     useEffect(() => {
         if (repo) return; // Only run on landing view
 
         const ctx = gsap.context(() => {
-            // Hero text animation
             if (heroTitleRef.current) {
                 gsap.fromTo(
                     heroTitleRef.current,
@@ -155,7 +172,6 @@ export default function Home() {
                     { y: 0, opacity: 1, scale: 1, duration: 1, delay: 0.35, ease: 'power3.out' }
                 );
             }
-            // AI Floating card subtle infinite animation
             if (aiCardRef.current) {
                 gsap.to(aiCardRef.current, {
                     y: -8,
@@ -186,6 +202,12 @@ export default function Home() {
     }, [userId]);
 
     const handleIngest = async (url: string) => {
+        if (!isLoggedIn) {
+            showToast('Please sign in to index repositories', 'info');
+            setIsAuthModalOpen(true);
+            return;
+        }
+
         const githubPattern = /^https?:\/\/(www\.)?github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
         if (!githubPattern.test(url.trim())) {
             showToast('Please enter a valid GitHub repository URL', 'error');
@@ -235,6 +257,12 @@ export default function Home() {
     };
 
     const selectRepo = (r: Repo) => {
+        if (!isLoggedIn) {
+            showToast('Please sign in to access the repository workspace', 'info');
+            setIsAuthModalOpen(true);
+            return;
+        }
+
         async function fetchDetails() {
             try {
                 const res = await fetch(`/api/repos?userId=${userId}`);
@@ -262,16 +290,16 @@ export default function Home() {
     };
 
     const handleOpenWorkspace = () => {
+        if (!isLoggedIn) {
+            showToast('Please sign in to access the GitFlair workspace', 'info');
+            setIsAuthModalOpen(true);
+            return;
+        }
+
         if (savedRepos.length > 0) {
             selectRepo(savedRepos[0]);
         } else {
             setActiveTab('projects');
-            setRepo({
-                id: 'empty-workspace',
-                fullName: 'demo/gitflair',
-                url: 'https://github.com/demo/gitflair',
-                createdAt: new Date().toISOString(),
-            });
         }
     };
 
@@ -279,7 +307,7 @@ export default function Home() {
         <main className="min-h-screen relative bg-[#08080a] text-zinc-200 selection:bg-blue-500/30 selection:text-white font-sans">
             <AnimatePresence mode="wait">
                 {!repo ? (
-                    /* ───── Exact Dark Minimal Landing View with GSAP Animations & Corrected Content ───── */
+                    /* ───── Landing View ───── */
                     <motion.div
                         key="landing"
                         initial={{ opacity: 0 }}
@@ -298,41 +326,45 @@ export default function Home() {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {isLoggedIn ? (
-                                        <button
-                                            onClick={() => setIsProfileOpen(true)}
-                                            className="flex items-center gap-2.5 text-xs text-zinc-400 hover:text-white font-medium transition-colors"
-                                        >
-                                            {session?.user?.image ? (
-                                                <img
-                                                    src={session.user.image}
-                                                    alt={session.user.name || 'User'}
-                                                    className="w-7 h-7 rounded-full border-2 border-white/20 shadow-md"
-                                                />
-                                            ) : (
-                                                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 text-white flex items-center justify-center text-xs font-bold shadow-md">
-                                                    {session?.user?.name?.charAt(0).toUpperCase() || 'U'}
-                                                </div>
-                                            )}
-                                            <span className="hidden sm:inline">{session?.user?.name?.split(' ')[0] || 'Account'}</span>
-                                        </button>
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                onClick={() => setIsProfileOpen(true)}
+                                                className="flex items-center gap-2 text-xs text-zinc-300 hover:text-white font-medium transition-colors"
+                                            >
+                                                {session?.user?.image ? (
+                                                    <img
+                                                        src={session.user.image}
+                                                        alt={session.user.name || 'User'}
+                                                        className="w-7 h-7 rounded-full border border-white/20"
+                                                    />
+                                                ) : (
+                                                    <div className="w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs font-bold">
+                                                        {session?.user?.name?.charAt(0).toUpperCase() || 'U'}
+                                                    </div>
+                                                )}
+                                                <span className="hidden sm:inline">{session?.user?.name || 'Account'}</span>
+                                            </button>
+
+                                            <button
+                                                onClick={() => signOut()}
+                                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+                                                title="Sign Out"
+                                            >
+                                                <LogOut className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
                                     ) : (
                                         <button
-                                            onClick={() => signIn.social({ provider: 'google' })}
-                                            className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white font-medium transition-colors"
+                                            onClick={() => setIsAuthModalOpen(true)}
+                                            className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-xs font-semibold text-white transition-all"
                                         >
-                                            <svg className="w-4 h-4" viewBox="0 0 24 24">
-                                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                                            </svg>
-                                            <span>Sign in</span>
+                                            Sign In
                                         </button>
                                     )}
 
                                     <button
                                         onClick={handleOpenWorkspace}
-                                        className="text-xs text-zinc-400 hover:text-white font-medium transition-colors flex items-center gap-1"
+                                        className="px-4 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white transition-all flex items-center gap-1.5 shadow-md"
                                     >
                                         <span>Open Workspace</span>
                                         <ArrowRight className="w-3.5 h-3.5" />
@@ -341,7 +373,7 @@ export default function Home() {
                             </div>
                         </header>
 
-                        {/* Main Hero Header (Animated with GSAP) */}
+                        {/* Main Hero Header */}
                         <div className="max-w-7xl mx-auto px-6 sm:px-12 pt-16 pb-8 w-full space-y-4">
                             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                                 <div className="max-w-3xl space-y-3">
@@ -360,47 +392,24 @@ export default function Home() {
                                 </div>
                             </div>
 
-                            {/* Workspaces & Navigation CTAs */}
+                            {/* Navigation CTAs */}
                             <div ref={heroCtaRef} id="ingest" className="pt-4 space-y-4">
-                                {savedRepos.length > 0 ? (
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <button
-                                            onClick={handleOpenWorkspace}
-                                            className="px-5 py-2.5 rounded-full bg-white hover:bg-zinc-200 text-black font-semibold text-xs transition-all shadow-md active:scale-95 flex items-center gap-2"
-                                        >
-                                            <span>Open Workspace ({getRepoName(savedRepos[0])})</span>
-                                            <ArrowRight className="w-3.5 h-3.5" />
-                                        </button>
-                                        <div className="flex items-center gap-2">
-                                            {savedRepos.slice(1).map((r) => (
-                                                <button
-                                                    key={r.id}
-                                                    onClick={() => selectRepo(r)}
-                                                    className="px-3 py-1.5 rounded-xl bg-[#141417] hover:bg-[#202026] border border-white/10 text-xs text-white flex items-center gap-2 transition-all"
-                                                >
-                                                    <FolderGit2 className="w-3.5 h-3.5 text-blue-400" />
-                                                    <span>{getRepoFullName(r)}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <button
-                                        onClick={handleOpenWorkspace}
-                                        className="px-6 py-3 rounded-full bg-white hover:bg-zinc-200 text-black font-semibold text-xs transition-all shadow-md flex items-center gap-2"
-                                    >
-                                        <span>Launch Workspace</span>
-                                        <ArrowRight className="w-3.5 h-3.5" />
-                                    </button>
-                                )}
+                                <button
+                                    onClick={handleOpenWorkspace}
+                                    className="px-6 py-3 rounded-full bg-white hover:bg-zinc-200 text-black font-semibold text-xs transition-all shadow-md flex items-center gap-2 active:scale-95"
+                                >
+                                    <span>{isLoggedIn ? 'Go to Workspace' : 'Sign In to Access Workspace'}</span>
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
                             </div>
                         </div>
 
-                        {/* Hero Interactive Preview Mockup Window (Corrected Text & Animated with GSAP) */}
+                        {/* Hero Interactive Preview Mockup Window */}
                         <div className="max-w-7xl mx-auto px-6 sm:px-12 py-8 w-full">
                             <div
                                 ref={mockWindowRef}
-                                className="rounded-2xl border border-white/[0.08] bg-[#0c0c0e] shadow-2xl overflow-hidden relative"
+                                className="rounded-2xl border border-white/[0.08] bg-[#0c0c0e] shadow-2xl overflow-hidden relative cursor-pointer"
+                                onClick={handleOpenWorkspace}
                             >
                                 <div className="flex flex-col md:flex-row min-h-[420px]">
                                     {/* Sidebar Mock */}
@@ -467,7 +476,7 @@ export default function Home() {
                                             </p>
                                         </div>
 
-                                        {/* AI Floating Card Overlay (GSAP Yoyo Float Animation) */}
+                                        {/* AI Floating Card Overlay */}
                                         <div
                                             ref={aiCardRef}
                                             className="absolute bottom-6 right-6 w-84 rounded-2xl bg-[#141418] border border-purple-500/20 shadow-2xl p-4 space-y-3 backdrop-blur-md hidden sm:block"
@@ -583,7 +592,7 @@ export default function Home() {
                         </footer>
                     </motion.div>
                 ) : (
-                    /* ───── Workspace Active View (Clean Streamlined Sidebar) ───── */
+                    /* ───── Workspace Active View ───── */
                     <motion.div
                         key="workspace"
                         initial={{ opacity: 0 }}
@@ -607,8 +616,8 @@ export default function Home() {
                                     </div>
                                     <div className="flex items-center gap-2 text-zinc-500">
                                         <Search className="w-3.5 h-3.5 cursor-pointer hover:text-white transition-colors" onClick={() => setIsReposOverlayOpen(true)} />
-                                        <button onClick={() => setRepo(null)} title="Switch / Ingest Repo">
-                                            <ArrowLeft className="w-3.5 h-3.5 cursor-pointer hover:text-white transition-colors" />
+                                        <button onClick={() => signOut()} title="Sign Out">
+                                            <LogOut className="w-3.5 h-3.5 cursor-pointer hover:text-white transition-colors" />
                                         </button>
                                     </div>
                                 </div>
@@ -707,11 +716,11 @@ export default function Home() {
                                                     className="w-4 h-4 rounded-full"
                                                 />
                                             ) : (
-                                                <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 text-white font-bold flex items-center justify-center text-[9px]">
-                                                    {(session?.user?.name?.charAt(0) || 'α').toUpperCase()}
+                                                <div className="w-4 h-4 rounded-full bg-purple-600 text-white font-bold flex items-center justify-center text-[9px]">
+                                                    {(session?.user?.name?.charAt(0) || 'U').toUpperCase()}
                                                 </div>
                                             )}
-                                            <span className="text-white font-semibold">{session?.user?.name || '@alpha_dev'}</span>
+                                            <span className="text-white font-semibold truncate max-w-[100px]">{session?.user?.name || 'Account'}</span>
                                         </span>
                                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                     </button>
@@ -721,17 +730,17 @@ export default function Home() {
                                         <SidebarSubLink
                                             active={false}
                                             label="Personal"
-                                            onClick={() => setIsProfileOpen(true)}
+                                            onClick={() => { setProfileModalTab('profile'); setIsProfileOpen(true); }}
                                         />
                                         <SidebarSubLink
                                             active={false}
                                             label="GitHub Profile"
-                                            onClick={() => setIsProfileOpen(true)}
+                                            onClick={() => { setProfileModalTab('analytics'); setIsProfileOpen(true); }}
                                         />
                                         <SidebarSubLink
-                                            active={false}
+                                            active={activeTab === 'ai_tools'}
                                             label="AI Tools"
-                                            onClick={() => setIsProfileOpen(true)}
+                                            onClick={() => setActiveTab('ai_tools')}
                                         />
                                     </div>
                                 </div>
@@ -749,7 +758,7 @@ export default function Home() {
                                     <span className="font-semibold text-white">{getRepoName(repo) || 'Workspace'}</span>
                                     <span className="text-zinc-600">›</span>
                                     <span className="text-zinc-300 font-medium">
-                                        {activeTab === 'chat' ? 'AI Chat' : activeTab === 'projects' ? 'Projects' : activeTab === 'notes_pages' ? 'Pages & Notes' : activeTab === 'issues' ? 'GitHub Issues' : activeTab === 'notes' ? 'To-Do & Checklist' : activeTab === 'dashboard' ? 'Overview' : activeTab === 'arch' ? 'Architecture' : activeTab === 'analytics' ? 'Analytics' : 'PR Reviews'}
+                                        {activeTab === 'chat' ? 'AI Chat' : activeTab === 'projects' ? 'Projects' : activeTab === 'notes_pages' ? 'Pages & Notes' : activeTab === 'issues' ? 'GitHub Issues' : activeTab === 'notes' ? 'To-Do & Checklist' : activeTab === 'dashboard' ? 'Overview' : activeTab === 'arch' ? 'Architecture' : activeTab === 'analytics' ? 'Analytics' : activeTab === 'ai_tools' ? 'AI Tools' : 'PR Reviews'}
                                     </span>
                                     <Star className="w-3 h-3 text-amber-400 fill-amber-400/20" />
                                 </div>
@@ -854,6 +863,12 @@ export default function Home() {
                                             )}
                                         </motion.div>
                                     )}
+
+                                    {activeTab === 'ai_tools' && (
+                                        <motion.div key="ai-tools-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            <AIToolsView />
+                                        </motion.div>
+                                    )}
                                 </AnimatePresence>
                             </div>
                         </div>
@@ -946,8 +961,9 @@ export default function Home() {
 
             {/* Workspace Modals */}
             <InboxModal isOpen={isInboxOpen} onClose={() => setIsInboxOpen(false)} />
-            <GithubProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
+            <GithubProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} initialTab={profileModalTab} />
             <TechTriviaModal isOpen={isTriviaOpen} onClose={() => setIsTriviaOpen(false)} />
+            <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
         </main>
     );
 }
