@@ -1,119 +1,131 @@
 @import "tailwindcss";
 
 :root {
-  --background: #09090b;
+  --bg-canvas: #0d0d0f;
+  --bg-surface: #161619;
+  --bg-elevated: #1e1e22;
+  --bg-input: #232328;
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-focus: rgba(59, 130, 246, 0.5);
   --foreground: #ededed;
-  --primary: #3b82f6;
-  --accent: #6366f1;
-  --card: #111113;
-  --border: #1f1f23;
+  --muted: #a1a1aa;
 }
 
 body {
-  background: var(--background);
+  background: var(--bg-canvas);
   color: var(--foreground);
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
 }
 
-/* Glass card */
-.glass-card {
-  background: rgba(17, 17, 19, 0.8);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+/* Warm Matte Card Containers */
+.matte-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 1rem;
-  transition: border-color 0.2s ease;
+  transition: all 0.2s ease-in-out;
 }
 
-.glass-card:hover {
-  border-color: rgba(255, 255, 255, 0.1);
+.matte-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
-/* Primary button */
-.btn-primary {
-  background: #2563eb;
-  color: white;
-  font-weight: 500;
-  padding: 0.5rem 1.5rem;
-  border-radius: 0.5rem;
-  transition: all 0.15s ease;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+.matte-card-active {
+  background-color: var(--bg-surface);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 20px -5px rgba(59, 130, 246, 0.15);
 }
 
-.btn-primary:hover {
-  background: #1d4ed8;
+/* Sidebar & Navigation Panels */
+.matte-sidebar {
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
 }
 
-.btn-primary:active {
-  transform: scale(0.96);
+/* Elevated Inner Containers */
+.matte-elevated {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
 }
 
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* Input Fields */
+.matte-input {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  color: #ffffff;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
 }
 
-/* Input field */
-.input-field {
-  background: #0a0a0c;
-  border: 1px solid #27272a;
-  border-radius: 0.5rem;
-  padding: 0.5rem 1rem;
-  color: white;
-  transition: all 0.15s ease;
+.matte-input:focus {
   outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
-.input-field:focus {
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+/* Pill Action Buttons */
+.matte-btn {
+  background-color: var(--bg-elevated);
+  color: #ededed;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
 }
 
-.input-field::placeholder {
-  color: #52525b;
+.matte-btn:hover {
+  background-color: #27272c;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
-/* Scrollbar */
+.matte-btn-primary {
+  background-color: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+  font-weight: 600;
+}
+
+.matte-btn-primary:hover {
+  background-color: #e5e5e5;
+  color: #000000;
+}
+
+/* ASCII & Monospace Text Styling */
+.font-mono-tech {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.ascii-banner {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: pre;
+  line-height: 1.1;
+  letter-spacing: -0.05em;
+  color: #60a5fa;
+}
+
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--bg-canvas);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e1e22;
+  background: #27272c;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #2a2a30;
-}
-
-/* Smooth rendering */
-* {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Glow effect for input focus */
-.glow-ring {
-  position: relative;
-}
-
-.glow-ring::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 1rem;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.1));
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  z-index: -1;
-  pointer-events: none;
-}
-
-.glow-ring:focus-within::before {
-  opacity: 1;
+  background: #3f3f46;
 }

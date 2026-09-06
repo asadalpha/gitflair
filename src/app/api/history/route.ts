@@ -1,31 +1,40 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db";
+import { qaHistory } from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
+import { requireAuth } from "@/lib/session";
 
-export async function GET(req: NextRequest) {
-    try {
-        const { searchParams } = new URL(req.url);
-        const repoId = searchParams.get('repoId');
-        const userId = searchParams.get('userId') || 'anonymous';
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const repositoryId = searchParams.get("repositoryId");
+    const userId = searchParams.get("userId") ?? undefined;
 
-        if (!repoId) {
-            return NextResponse.json({ error: 'repoId is required' }, { status: 400 });
-        }
-
-        const { data, error } = await supabase
-            .from('qa_history')
-            .select('*')
-            .eq('repo_id', repoId)
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(10);
-
-        if (error) {
-            console.error('History query error:', error);
-            return NextResponse.json([]);
-        }
-
-        return NextResponse.json(data ?? []);
-    } catch {
-        return NextResponse.json([]);
+    if (!repositoryId) {
+      return NextResponse.json(
+        { error: "repositoryId is required" },
+        { status: 400 },
+      );
     }
+
+    const { user } = await requireAuth(request.headers, userId);
+
+    const rows = await db
+      .select()
+      .from(qaHistory)
+      .where(
+        and(
+          eq(qaHistory.repositoryId, repositoryId),
+          eq(qaHistory.userId, user.id),
+        ),
+      )
+      .orderBy(desc(qaHistory.createdAt))
+      .limit(10);
+
+    return NextResponse.json(rows);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

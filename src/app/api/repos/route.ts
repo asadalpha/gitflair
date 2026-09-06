@@ -1,26 +1,35 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db";
+import { repository } from "@/db/schema";
+import { eq, desc, isNotNull } from "drizzle-orm";
+import { requireAuth, requireWorkspace } from "@/lib/session";
 
-export async function GET(req: NextRequest) {
-    try {
-        const { searchParams } = new URL(req.url);
-        const userId = searchParams.get('userId') || 'anonymous';
+export async function GET(request: NextRequest) {
+  try {
+    const userIdParam = request.nextUrl.searchParams.get("userId") || undefined;
+    const { user } = await requireAuth(request.headers, userIdParam);
+    const { workspace: userWorkspace } = await requireWorkspace(user.id);
 
-        const { data, error } = await supabase
-            .from('repositories')
-            .select('id, url, name, full_name, indexed_at')
-            .eq('user_id', userId)
-            .not('indexed_at', 'is', null)
-            .order('indexed_at', { ascending: false })
-            .limit(20);
+    const repos = await db
+      .select({
+        id: repository.id,
+        name: repository.name,
+        fullName: repository.fullName,
+        url: repository.url,
+        createdAt: repository.createdAt,
+        languagesJson: repository.languagesJson,
+        analysisJson: repository.analysisJson,
+      })
+      .from(repository)
+      .where(eq(repository.workspaceId, userWorkspace.id))
+      .orderBy(desc(repository.createdAt))
+      .limit(20);
 
-        if (error) {
-            console.error('Repos list error:', error);
-            return NextResponse.json([]);
-        }
-
-        return NextResponse.json(data ?? []);
-    } catch {
-        return NextResponse.json([]);
-    }
+    return NextResponse.json(repos);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    const status = message === "Unauthorized" ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
 }

@@ -23,7 +23,7 @@ interface HealthData {
 
 const SERVICE_META = {
     backend: { label: 'Backend', icon: Server, desc: 'Next.js API Server' },
-    database: { label: 'Database', icon: Database, desc: 'Supabase · PostgreSQL + pgvector' },
+    database: { label: 'Database', icon: Database, desc: 'Neon DB · PostgreSQL + pgvector' },
     llm: { label: 'LLM', icon: Cpu, desc: 'Google Gemini API' },
 } as const;
 

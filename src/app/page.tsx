@@ -2,261 +2,943 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import RepoInput from '@/components/RepoInput';
-import ChatInterface from '@/components/ChatInterface';
-import HistoryPanel from '@/components/HistoryPanel';
-import StatusBadge from '@/components/StatusPage';
+import RepoInput from '@/features/repos/components/repo-input';
+import ChatInterface from '@/features/chat/components/chat-interface';
+import HistoryPanel from '@/features/chat/components/history-panel';
+import StatusBadge from '@/components/ui/status-badge';
+import RepoAnalyzer from '@/features/repos/components/repo-analyzer';
+import PRReviewPanel from '@/features/pr-review/components/pr-review-panel';
+import FileInspector from '@/features/repos/components/file-inspector';
+import ArchFlow from '@/features/architecture/components/arch-flow';
+import CodeReviewNotes from '@/features/notes/components/code-review-notes';
+import DevAnalytics from '@/features/analytics/components/dev-analytics';
+import AIChatView from '@/features/chat/components/ai-chat-view';
+import ProjectsView from '@/features/projects/components/projects-view';
+import NotesPagesView from '@/features/notes/components/notes-pages-view';
+import GithubIssuesPanel from '@/features/issues/components/github-issues-panel';
+import InboxModal from '@/components/ui/inbox-modal';
+import GithubProfileModal from '@/components/ui/github-profile-modal';
+import TechTriviaModal from '@/components/ui/tech-trivia-modal';
 import { getAnonymousUserId } from '@/lib/user';
-import { showToast } from '@/components/Toast';
+import { useSession, signIn } from '@/lib/auth-client';
+import { showToast } from '@/components/ui/toast';
 import {
-  Sparkles, Search, Zap,
-  CheckCircle2, GitBranch, ArrowLeft, Database
+    BarChart3,
+    CheckSquare,
+    MessageSquare,
+    GitPullRequest,
+    ArrowLeft,
+    FolderGit2,
+    Sparkles,
+    ArrowRight,
+    Search,
+    Layers,
+    Plus,
+    BookOpen,
+    Inbox,
+    FileText,
+    Star,
+    ChevronDown,
+    ChevronUp
 } from 'lucide-react';
 
+interface Analysis {
+    summary: string;
+    architecture: string;
+    improvements: { title: string; desc: string; files: string[] }[];
+}
+
 interface Repo {
-  id: string;
-  full_name: string;
-  url: string;
-  indexed_at: string;
+    id: string;
+    full_name?: string;
+    fullName?: string;
+    name?: string;
+    url: string;
+    indexed_at?: string;
+    createdAt?: string;
+    languages_json?: Record<string, number>;
+    languagesJson?: Record<string, number>;
+    analysis_json?: Analysis;
+    analysisJson?: Analysis;
+}
+
+function getRepoFullName(r: Repo | null | undefined): string {
+    if (!r) return '';
+    return r.fullName || r.full_name || r.name || 'Repository';
+}
+
+function getRepoName(r: Repo | null | undefined): string {
+    if (!r) return '';
+    const fn = getRepoFullName(r);
+    return fn.includes('/') ? fn.split('/')[1] : (r.name || fn);
+}
+
+function getRepoIndexedAt(r: Repo | null | undefined): string {
+    if (!r) return new Date().toISOString();
+    return r.indexed_at || r.createdAt || new Date().toISOString();
 }
 
 export default function Home() {
-  const [repo, setRepo] = useState<Repo | null>(null);
-  const [savedRepos, setSavedRepos] = useState<Repo[]>([]);
-  const [isIngesting, setIsIngesting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [userId, setUserId] = useState('');
+    const [repo, setRepo] = useState<Repo | null>(null);
+    const [savedRepos, setSavedRepos] = useState<Repo[]>([]);
+    const [isIngesting, setIsIngesting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [userId, setUserId] = useState('');
 
-  // Initialize anonymous user
-  useEffect(() => {
-    const id = getAnonymousUserId();
-    setUserId(id);
-  }, []);
+    const { data: session } = useSession();
+    const isLoggedIn = !!session?.user;
+    const noRepo = !repo || !repo.url || repo.id === 'empty-workspace';
 
-  // Load previously indexed repos for this user
-  useEffect(() => {
-    if (!userId) return;
-    async function loadRepos() {
-      try {
-        const res = await fetch(`/api/repos?userId=${userId}`);
-        const data = await res.json();
-        if (Array.isArray(data)) setSavedRepos(data);
-      } catch {
+    // Tabs navigation: 'dashboard' | 'arch' | 'notes' | 'analytics' | 'chat' | 'pr' | 'projects' | 'notes_pages' | 'issues'
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'arch' | 'notes' | 'analytics' | 'chat' | 'pr' | 'projects' | 'notes_pages' | 'issues'>('chat');
 
-        console.error('Failed to load repos');
-      }
-    }
-    loadRepos();
-  }, [userId]);
+    // File Inspector drawer state
+    const [inspectingFile, setInspectingFile] = useState<string | null>(null);
 
-  const handleIngest = async (url: string) => {
-    // Validate GitHub URL
-    const githubPattern = /^https?:\/\/(www\.)?github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
-    if (!githubPattern.test(url.trim())) {
-      showToast('Please enter a valid GitHub repository URL (e.g. https://github.com/user/repo)', 'error');
-      return;
-    }
+    // Modal states
+    const [isReposOverlayOpen, setIsReposOverlayOpen] = useState(false);
+    const [isInboxOpen, setIsInboxOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isTriviaOpen, setIsTriviaOpen] = useState(false);
 
-    setIsIngesting(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/ingest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, userId }),
-      });
-      const data = await response.json();
-      if (data.error) throw new Error(data.error);
+    useEffect(() => {
+        if (session?.user) {
+            setUserId(session.user.id);
+        } else {
+            const id = getAnonymousUserId();
+            setUserId(id);
+        }
+    }, [session]);
 
-      const match = url.match(/github\.com\/([^/]+\/[^/]+)/);
-      const fullName = match ? match[1].replace('.git', '') : url;
-      const newRepo: Repo = {
-        id: data.repoId,
-        full_name: fullName,
-        url: url,
-        indexed_at: new Date().toISOString(),
-      };
-      setRepo(newRepo);
-      showToast('Repository indexed successfully!', 'success');
-      setSavedRepos(prev => {
-        const exists = prev.find(r => r.id === newRepo.id);
-        return exists ? prev : [newRepo, ...prev];
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'An error occurred during indexing';
-      showToast(msg, 'error');
-      setError(msg);
-    } finally {
-      setIsIngesting(false);
-    }
-  };
+    // Load previously indexed repos for this user
+    useEffect(() => {
+        if (!userId) return;
+        async function loadRepos() {
+            try {
+                const res = await fetch(`/api/repos?userId=${userId}`);
+                const data = await res.json();
+                if (Array.isArray(data)) setSavedRepos(data);
+            } catch {
+                console.error('Failed to load repos');
+            }
+        }
+        loadRepos();
+    }, [userId]);
 
-  const selectRepo = (r: Repo) => {
-    setRepo(r);
-    setError(null);
-  };
+    const handleIngest = async (url: string) => {
+        const githubPattern = /^https?:\/\/(www\.)?github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
+        if (!githubPattern.test(url.trim())) {
+            showToast('Please enter a valid GitHub repository URL', 'error');
+            return;
+        }
 
-  return (
-    <main className="min-h-screen relative overflow-hidden">
-      <AnimatePresence mode="wait">
-        {!repo ? (
-          /* ───── Landing View ───── */
-          <motion.div
-            key="landing"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="px-4 py-20"
-          >
-            <div className="max-w-4xl mx-auto text-center mb-16">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-semibold mb-6 tracking-wider uppercase"
-              >
-                <Sparkles size={12} />
-                <span>AI Q&A for codebases</span>
-              </motion.div>
+        setIsIngesting(true);
+        setError(null);
+        try {
+            const response = await fetch('/api/ingest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, userId }),
+            });
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
 
-              <motion.h1
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-6xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-white to-zinc-500 mb-6"
-              >
-                GitFlair
-              </motion.h1>
+            // Fetch newly ingested repo details
+            const resDetails = await fetch(`/api/repos?userId=${userId}`);
+            const updatedRepos = await resDetails.json();
+            if (Array.isArray(updatedRepos)) {
+                setSavedRepos(updatedRepos);
+                const freshlyIndexed = updatedRepos.find(r => r.id === data.repositoryId);
+                if (freshlyIndexed) {
+                    setRepo(freshlyIndexed);
+                } else {
+                    const match = url.match(/github\.com\/([^/]+\/[^/]+)/);
+                    const fullName = match ? match[1].replace('.git', '') : url;
+                    setRepo({
+                        id: data.repositoryId,
+                        fullName: fullName,
+                        url: url,
+                        createdAt: new Date().toISOString(),
+                    });
+                }
+            }
 
-              <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="text-zinc-400 text-lg md:text-xl font-light max-w-2xl mx-auto mb-12"
-              >
-                Your personal AI expert for any public codebase.
-                Index in seconds, ask in English, get answers with proof.
-              </motion.p>
+            showToast('Repository indexed successfully!', 'success');
+            setActiveTab('dashboard');
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'An error occurred during indexing';
+            showToast(msg, 'error');
+            setError(msg);
+        } finally {
+            setIsIngesting(false);
+        }
+    };
 
-              <RepoInput onIngest={handleIngest} isLoading={isIngesting} />
+    const selectRepo = (r: Repo) => {
+        async function fetchDetails() {
+            try {
+                const res = await fetch(`/api/repos?userId=${userId}`);
+                const list = await res.json();
+                if (Array.isArray(list)) {
+                    setSavedRepos(list);
+                    const fresh = list.find(item => item.id === r.id);
+                    if (fresh) {
+                        setRepo(fresh);
+                        return;
+                    }
+                }
+                setRepo(r);
+            } catch {
+                setRepo(r);
+            }
+        }
+        fetchDetails();
+        setActiveTab('dashboard');
+        setError(null);
+    };
 
-              {error && (
-                <p className="text-red-400 mt-4 text-sm">{error}</p>
-              )}
-            </div>
+    const handleFileClick = (path: string) => {
+        setInspectingFile(path);
+    };
 
-            {/* ── Previously Indexed Repos ── */}
-            {savedRepos.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="max-w-3xl mx-auto mb-20"
-              >
-                <div className="flex items-center gap-2 text-zinc-500 mb-4">
-                  <Database size={14} />
-                  <h2 className="text-xs font-medium uppercase tracking-widest">Indexed Repositories</h2>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {savedRepos.map((r, i) => (
-                    <motion.button
-                      key={r.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.05 * i }}
-                      onClick={() => selectRepo(r)}
-                      className="glass-card p-4 text-left hover:bg-white/5 hover:border-zinc-600 transition-all group"
+    const handleOpenWorkspace = () => {
+        if (savedRepos.length > 0) {
+            selectRepo(savedRepos[0]);
+        } else {
+            setActiveTab('projects');
+            setRepo({
+                id: 'empty-workspace',
+                fullName: 'demo/gitflair',
+                url: 'https://github.com/demo/gitflair',
+                createdAt: new Date().toISOString(),
+            });
+        }
+    };
+
+    return (
+        <main className="min-h-screen relative bg-[#08080a] text-zinc-200 selection:bg-blue-500/30 selection:text-white font-sans">
+            <AnimatePresence mode="wait">
+                {!repo ? (
+                    /* ───── Exact Dark Minimal Landing View Matching Screenshot ───── */
+                    <motion.div
+                        key="landing"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="min-h-screen flex flex-col justify-between bg-[#080809] text-zinc-100 font-sans"
                     >
-                      <div className="flex items-start gap-3">
-                        <GitBranch size={16} className="text-zinc-600 mt-0.5 group-hover:text-blue-400 transition-colors" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-zinc-200 truncate group-hover:text-white transition-colors">
-                            {r.full_name}
-                          </p>
-                          <p className="text-[10px] text-zinc-600 mt-1 flex items-center gap-1">
-                            <CheckCircle2 size={10} className="text-emerald-600" />
-                            Indexed {new Date(r.indexed_at).toLocaleDateString()}
-                          </p>
+                        {/* Minimal Top Header Navbar */}
+                        <header className="border-b border-white/5 bg-[#080809]/80 backdrop-blur-md sticky top-0 z-50">
+                            <div className="max-w-7xl mx-auto px-6 sm:px-12 h-16 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-pink-500 text-white flex items-center justify-center font-bold text-xs shadow-md">
+                                        GF
+                                    </div>
+                                    <span className="font-bold text-sm tracking-tight text-white">GitFlair</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {isLoggedIn ? (
+                                        <button
+                                            onClick={() => setIsProfileOpen(true)}
+                                            className="flex items-center gap-2.5 text-xs text-zinc-400 hover:text-white font-medium transition-colors"
+                                        >
+                                            {session?.user?.image ? (
+                                                <img
+                                                    src={session.user.image}
+                                                    alt={session.user.name || 'User'}
+                                                    className="w-7 h-7 rounded-full border-2 border-white/20 shadow-md"
+                                                />
+                                            ) : (
+                                                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 text-white flex items-center justify-center text-xs font-bold shadow-md">
+                                                    {session?.user?.name?.charAt(0).toUpperCase() || 'U'}
+                                                </div>
+                                            )}
+                                            <span className="hidden sm:inline">{session?.user?.name?.split(' ')[0] || 'Account'}</span>
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => signIn.social({ provider: 'google' })}
+                                            className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white font-medium transition-colors"
+                                        >
+                                            <svg className="w-4 h-4" viewBox="0 0 24 24">
+                                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                                            </svg>
+                                            <span>Sign in</span>
+                                        </button>
+                                    )}
+
+                                    <button
+                                        onClick={handleOpenWorkspace}
+                                        className="text-xs text-zinc-400 hover:text-white font-medium transition-colors flex items-center gap-1"
+                                    >
+                                        <span>Open Workspace</span>
+                                        <ArrowRight className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        </header>
+
+                        {/* Main Hero Header */}
+                        <div className="max-w-7xl mx-auto px-6 sm:px-12 pt-16 pb-8 w-full space-y-4">
+                            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                                <div className="max-w-3xl space-y-3">
+                                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight text-white leading-[1.1]">
+                                        AI architect & repo analyzer
+                                    </h1>
+                                    <p className="text-sm sm:text-base text-zinc-400 font-normal">
+                                        Index any GitHub repo, chat with your codebase, and get AI-powered architecture insights.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Workspaces & Navigation CTAs */}
+                            <div id="ingest" className="pt-4 space-y-4">
+                                {savedRepos.length > 0 ? (
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <button
+                                            onClick={handleOpenWorkspace}
+                                            className="px-5 py-2.5 rounded-full bg-white hover:bg-zinc-200 text-black font-semibold text-xs transition-all shadow-md active:scale-95 flex items-center gap-2"
+                                        >
+                                            <span>Open Workspace ({getRepoName(savedRepos[0])})</span>
+                                            <ArrowRight className="w-3.5 h-3.5" />
+                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            {savedRepos.slice(1).map((r) => (
+                                                <button
+                                                    key={r.id}
+                                                    onClick={() => selectRepo(r)}
+                                                    className="px-3 py-1.5 rounded-xl bg-[#141417] hover:bg-[#202026] border border-white/10 text-xs text-white flex items-center gap-2 transition-all"
+                                                >
+                                                    <FolderGit2 className="w-3.5 h-3.5 text-blue-400" />
+                                                    <span>{getRepoFullName(r)}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={handleOpenWorkspace}
+                                        className="px-6 py-3 rounded-full bg-white hover:bg-zinc-200 text-black font-semibold text-xs transition-all shadow-md flex items-center gap-2"
+                                    >
+                                        <span>Launch Workspace</span>
+                                        <ArrowRight className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                      </div>
-                    </motion.button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
 
-            {/* ── Feature Cards ── */}
-            <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              <FeatureCard
-                icon={<Search className="text-purple-400" />}
-                title="Code-Grounded Q&A"
-                description="Answers directly linked to specific files and line ranges."
-              />
-              <FeatureCard
-                icon={<Zap className="text-amber-400" />}
-                title="Fast Ingestion"
-                description="Parallel chunking and processing for massive repositories."
-              />
-            </div>
+                        {/* Hero Interactive Preview */}
+                        <div className="max-w-7xl mx-auto px-6 sm:px-12 py-8 w-full">
+                            <div className="rounded-2xl border border-white/[0.08] bg-[#0c0c0e] shadow-2xl overflow-hidden relative">
+                                <div className="flex flex-col md:flex-row min-h-[420px]">
+                                    <div className="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/[0.06] bg-[#09090b] p-3 space-y-4 shrink-0 select-none">
+                                        <div className="flex items-center justify-between px-2 py-1 border-b border-white/5 pb-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded bg-gradient-to-tr from-purple-600 to-pink-500 text-white font-bold flex items-center justify-center text-[9px]">
+                                                    GF
+                                                </div>
+                                                <span className="font-semibold text-white text-xs">GitFlair</span>
+                                                <ChevronDown className="w-3 h-3 text-zinc-500" />
+                                            </div>
+                                        </div>
 
-            {/* ── Status Badge ── */}
-            <div className="max-w-4xl mx-auto flex justify-center">
-              <StatusBadge />
-            </div>
-          </motion.div>
-        ) : (
-          /* ───── Chat View ───── */
-          <motion.div
-            key="chat"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="px-4 py-6 max-w-4xl mx-auto"
-          >
-            {/* Top bar */}
-            <div className="flex items-center justify-between mb-6">
-              <button
-                onClick={() => setRepo(null)}
-                className="flex items-center gap-2 text-zinc-500 hover:text-white text-sm transition-colors"
-              >
-                <ArrowLeft size={16} />
-                <span>Back</span>
-              </button>
+                                        <div className="space-y-1 text-xs">
+                                            <div className="px-2 py-1 text-zinc-400 hover:text-white flex items-center gap-2">
+                                                <span>⚡</span> Pulse
+                                            </div>
+                                            <div className="px-2 py-1 text-zinc-400 hover:text-white flex items-center gap-2">
+                                                <span>📥</span> Inbox
+                                            </div>
+                                            <div className="px-2 py-1 text-zinc-400 hover:text-white flex items-center gap-2">
+                                                <span>🎯</span> My issues
+                                            </div>
+                                            <div className="px-2 py-1 text-zinc-400 hover:text-white flex items-center gap-2">
+                                                <span>🔀</span> Reviews
+                                            </div>
+                                        </div>
 
-              <div className="flex items-center gap-3">
-                <GitBranch size={14} className="text-zinc-600" />
-                <h2 className="text-lg font-semibold text-white">{repo.full_name}</h2>
-                <span className="flex items-center gap-1 text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                  <CheckCircle2 size={10} />
-                  Indexed
-                </span>
-              </div>
+                                        <div className="space-y-1 text-xs pt-2 border-t border-white/5">
+                                            <div className="px-2 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                                                <span>Favorites</span>
+                                                <ChevronDown className="w-3 h-3 text-zinc-500" />
+                                            </div>
+                                            <div className="px-2 py-1 text-white bg-white/5 rounded-lg flex items-center gap-2 font-medium">
+                                                <span className="text-amber-400">🟡</span> Faster app launch
+                                            </div>
+                                            <div className="px-2 py-1 text-zinc-400">Agent tasks</div>
+                                            <div className="px-2 py-1 text-zinc-400">UI Refresh</div>
+                                        </div>
+                                    </div>
 
-              <a
-                href={repo.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-zinc-500 hover:text-blue-400 transition-colors"
-              >
-                GitHub ↗
-              </a>
-            </div>
+                                    <div className="flex-1 p-6 space-y-6 relative bg-[#0e0e11] text-xs">
+                                        <div className="flex items-center justify-between text-zinc-400 border-b border-white/5 pb-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-amber-400">🟡</span>
+                                                <span className="font-mono text-white font-semibold">DRV-8852 Faster app launch</span>
+                                                <Star className="w-3.5 h-3.5 text-amber-400" />
+                                            </div>
+                                            <div className="flex items-center gap-3 font-mono text-[11px] text-zinc-500">
+                                                <span>1 / 84</span>
+                                                <ChevronUp className="w-3.5 h-3.5" />
+                                                <ChevronDown className="w-3.5 h-3.5" />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-3 max-w-xl">
+                                            <h2 className="text-xl font-bold text-white tracking-tight">Faster app launch</h2>
+                                            <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+                                                Render UI before <code className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-zinc-200 text-[11px]">vehicle_state</code> sync when minimum required state is present, instead of blocking on full refresh during startup.
+                                            </p>
+                                        </div>
+                                        <div className="absolute bottom-6 right-6 w-80 rounded-2xl bg-[#141418] border border-white/10 shadow-2xl p-4 space-y-3 backdrop-blur-md hidden sm:block">
+                                            <div className="flex items-center justify-between text-xs text-white border-b border-white/5 pb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center text-[10px] font-bold">🤖</div>
+                                                    <span className="font-semibold">GitFlair <span className="text-purple-400">AI</span></span>
+                                                </div>
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-[#1c1c22] border border-white/5 text-xs text-white font-medium">
+                                                Fix the dimmed ride rows that never reset and open a PR
+                                            </div>
+                                            <p className="text-zinc-300 text-[11px] leading-relaxed">
+                                                Pushed a draft PR. Removed dimmedIds — isItemDimmed now checks waitingStatusById directly.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
-            <ChatInterface repoId={repo.id} repoUrl={repo.url} userId={userId} />
-            <HistoryPanel repoId={repo.id} userId={userId} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </main>
-  );
+                        {/* Landing Page Features Grid */}
+                        <div className="max-w-7xl mx-auto px-6 sm:px-12 py-12 w-full border-t border-white/[0.08]">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                <div className="space-y-3">
+                                    <div className="h-36 flex items-center justify-center">
+                                        <svg className="w-28 h-28 stroke-zinc-500 fill-none" viewBox="0 0 200 200">
+                                            <path d="M100 40 L170 75 L100 110 L30 75 Z" strokeWidth="1" strokeDasharray="3 3" />
+                                            <path d="M30 75 L30 135 L100 170 L170 135 L170 75" strokeWidth="1.2" />
+                                            <path d="M30 90 L100 125 L170 90" strokeWidth="1" strokeOpacity="0.4" />
+                                            <path d="M30 105 L100 140 L170 105" strokeWidth="1" strokeOpacity="0.4" />
+                                            <path d="M30 120 L100 155 L170 120" strokeWidth="1" strokeOpacity="0.4" />
+                                            <path d="M100 110 L100 170" strokeWidth="1.2" />
+                                            <ellipse cx="100" cy="75" rx="32" ry="16" strokeWidth="1.2" />
+                                            <line x1="70" y1="75" x2="130" y2="75" strokeWidth="0.8" strokeDasharray="2 2" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-sm font-semibold text-white tracking-tight">Purpose-built</h3>
+                                    <p className="text-xs text-zinc-400 leading-relaxed">
+                                        Shaped by the practices of world-class product teams.
+                                    </p>
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="h-36 flex items-center justify-center">
+                                        <svg className="w-28 h-28 stroke-zinc-500 fill-none" viewBox="0 0 200 200">
+                                            <g transform="translate(100, 30)">
+                                                <path d="M0 0 L28 14 L0 28 L-28 14 Z" strokeWidth="1.2" />
+                                                <path d="M-28 14 L-28 42 L0 56 L28 42 L28 14" strokeWidth="1.2" />
+                                                <path d="M0 28 L0 56" strokeWidth="1.2" />
+                                            </g>
+                                            <g transform="translate(55, 65)">
+                                                <path d="M0 0 L28 14 L0 28 L-28 14 Z" strokeWidth="1.2" />
+                                                <path d="M-28 14 L-28 46 L0 60 L28 46 L28 14" strokeWidth="1.2" />
+                                                <path d="M0 28 L0 60" strokeWidth="1.2" />
+                                            </g>
+                                            <g transform="translate(145, 65)">
+                                                <path d="M0 0 L28 14 L0 28 L-28 14 Z" strokeWidth="1.2" />
+                                                <path d="M-28 14 L-28 46 L0 60 L28 46 L28 14" strokeWidth="1.2" />
+                                                <path d="M0 28 L0 60" strokeWidth="1.2" />
+                                            </g>
+                                            <g transform="translate(100, 105)">
+                                                <path d="M0 0 L25 12.5 L0 25 L-25 12.5 Z" strokeWidth="1.2" />
+                                                <path d="M-25 12.5 L-25 42.5 L0 55 L25 42.5 L25 12.5" strokeWidth="1.2" />
+                                                <path d="M0 25 L0 55" strokeWidth="1.2" />
+                                            </g>
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-sm font-semibold text-white tracking-tight">Powered by agents</h3>
+                                    <p className="text-xs text-zinc-400 leading-relaxed">
+                                        Workflows shared by humans and agents — from PRDs to PRs.
+                                    </p>
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="h-36 flex items-center justify-center">
+                                        <svg className="w-28 h-28 stroke-zinc-500 fill-none" viewBox="0 0 200 200">
+                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => {
+                                                const x = 25 + i * 12;
+                                                const y = 145 - i * 7;
+                                                const height = 25 + i * 9;
+                                                return (
+                                                    <g key={i}>
+                                                        <path
+                                                            d={`M${x} ${y} L${x + 10} ${y - 5} L${x + 10} ${y - 5 - height} L${x} ${y - height} Z`}
+                                                            strokeWidth={i === 11 ? '1.5' : '1'}
+                                                            strokeOpacity={0.3 + (i / 11) * 0.7}
+                                                        />
+                                                    </g>
+                                                );
+                                            })}
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-sm font-semibold text-white tracking-tight">Designed for speed</h3>
+                                    <p className="text-xs text-zinc-400 leading-relaxed">
+                                        Reduces noise and restores momentum to ship with focus.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <footer className="border-t border-white/5 py-6 text-center text-xs text-zinc-500 font-mono">
+                            <div className="max-w-7xl mx-auto px-6 sm:px-12 flex items-center justify-between">
+                                <span className="text-zinc-400">Built by Asad · GitFlair</span>
+                                <StatusBadge />
+                            </div>
+                        </footer>
+                    </motion.div>
+                ) : (
+                    /* ───── Workspace Active View (Clean Streamlined Sidebar) ───── */
+                    <motion.div
+                        key="workspace"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="min-h-screen flex flex-col md:flex-row bg-[#0e0e10] font-sans text-xs text-zinc-300"
+                    >
+                        {/* Streamlined Left Sidebar */}
+                        <div className="w-full md:w-60 border-b md:border-b-0 md:border-r border-white/[0.06] bg-[#0c0c0e] p-3 flex flex-col justify-between shrink-0 select-none">
+                            <div className="space-y-4">
+                                {/* Top Team / Workspace Selector Row */}
+                                <div className="flex items-center justify-between px-1 py-1">
+                                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsReposOverlayOpen(true)}>
+                                        <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-pink-500 to-purple-600 text-white flex items-center justify-center text-[10px] font-bold shadow">
+                                            GF
+                                        </div>
+                                        <span className="font-semibold text-white text-xs truncate max-w-[110px]">
+                                            GitFlair
+                                        </span>
+                                        <ChevronDown className="w-3 h-3 text-zinc-500" />
+                                    </div>
+                                    <div className="flex items-center gap-2 text-zinc-500">
+                                        <Search className="w-3.5 h-3.5 cursor-pointer hover:text-white transition-colors" onClick={() => setIsReposOverlayOpen(true)} />
+                                        <button onClick={() => setRepo(null)} title="Switch / Ingest Repo">
+                                            <ArrowLeft className="w-3.5 h-3.5 cursor-pointer hover:text-white transition-colors" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Primary Shortcuts */}
+                                <div className="space-y-0.5">
+                                    <SidebarLink
+                                        active={activeTab === 'projects'}
+                                        icon={<Layers className="w-3.5 h-3.5 text-blue-400" />}
+                                        label="Projects"
+                                        onClick={() => setActiveTab('projects')}
+                                    />
+                                    <SidebarLink
+                                        active={activeTab === 'notes_pages'}
+                                        icon={<FileText className="w-3.5 h-3.5 text-pink-400" />}
+                                        label="Pages & Notes"
+                                        onClick={() => setActiveTab('notes_pages')}
+                                    />
+                                </div>
+
+                                {/* Workspace Section */}
+                                <div className="space-y-1">
+                                    <div className="px-2 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center justify-between">
+                                        <span>Workspace</span>
+                                    </div>
+
+                                    {/* Repos Button */}
+                                    <button
+                                        onClick={() => setIsReposOverlayOpen(true)}
+                                        className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-[#1a1a1e] text-zinc-300 hover:text-white flex items-center justify-between transition-all"
+                                    >
+                                        <span className="flex items-center gap-2 font-medium">
+                                            <FolderGit2 className="w-3.5 h-3.5 text-blue-400" />
+                                            <span>Repos</span>
+                                        </span>
+                                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-zinc-400">
+                                            {savedRepos.length}
+                                        </span>
+                                    </button>
+
+                                    {/* Sub-items for Active Selected Repo */}
+                                    <div className="pl-3 space-y-0.5 border-l border-white/5 ml-3">
+                                        <SidebarSubLink
+                                            active={activeTab === 'chat'}
+                                            label="AI Chat"
+                                            onClick={() => setActiveTab('chat')}
+                                        />
+                                        <SidebarSubLink
+                                            active={activeTab === 'dashboard'}
+                                            label="Overview (Analyzer)"
+                                            onClick={() => setActiveTab('dashboard')}
+                                        />
+                                        <SidebarSubLink
+                                            active={activeTab === 'arch'}
+                                            label="Arch Diagram"
+                                            onClick={() => setActiveTab('arch')}
+                                        />
+                                        <SidebarSubLink
+                                            active={activeTab === 'analytics'}
+                                            label="Dev Analytics"
+                                            onClick={() => setActiveTab('analytics')}
+                                        />
+                                        <SidebarSubLink
+                                            active={activeTab === 'issues'}
+                                            label="GitHub Issues"
+                                            onClick={() => setActiveTab('issues')}
+                                        />
+                                        <SidebarSubLink
+                                            active={activeTab === 'notes'}
+                                            label="To-Do & Checklist"
+                                            onClick={() => setActiveTab('notes')}
+                                        />
+                                        <SidebarSubLink
+                                            active={activeTab === 'pr'}
+                                            label="PR Reviews"
+                                            onClick={() => setActiveTab('pr')}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Profile Section */}
+                                <div className="space-y-1 pt-1">
+                                    <div className="px-2 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center justify-between">
+                                        <span>Profile</span>
+                                    </div>
+
+                                    <button
+                                        onClick={() => setIsProfileOpen(true)}
+                                        className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-[#1a1a1e] text-zinc-300 hover:text-white flex items-center justify-between transition-all"
+                                    >
+                                        <span className="flex items-center gap-2 font-medium">
+                                            {session?.user?.image ? (
+                                                <img
+                                                    src={session.user.image}
+                                                    alt={session.user.name || 'User'}
+                                                    className="w-4 h-4 rounded-full"
+                                                />
+                                            ) : (
+                                                <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 text-white font-bold flex items-center justify-center text-[9px]">
+                                                    {(session?.user?.name?.charAt(0) || 'α').toUpperCase()}
+                                                </div>
+                                            )}
+                                            <span className="text-white font-semibold">{session?.user?.name || '@alpha_dev'}</span>
+                                        </span>
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    </button>
+
+                                    {/* Sub-items inside Profile */}
+                                    <div className="pl-3 space-y-0.5 border-l border-white/5 ml-3">
+                                        <SidebarSubLink
+                                            active={false}
+                                            label="Personal"
+                                            onClick={() => setIsProfileOpen(true)}
+                                        />
+                                        <SidebarSubLink
+                                            active={false}
+                                            label="GitHub Profile"
+                                            onClick={() => setIsProfileOpen(true)}
+                                        />
+                                        <SidebarSubLink
+                                            active={false}
+                                            label="AI Tools"
+                                            onClick={() => setIsProfileOpen(true)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Main Workspace Body Content */}
+                        <div className="flex-1 flex flex-col min-w-0 bg-[#0e0e10]">
+                            {/* Top Breadcrumb & Filter Bar */}
+                            <div className="h-12 border-b border-white/[0.06] px-6 flex items-center justify-between bg-[#0c0c0e]">
+                                <div className="flex items-center gap-2 text-xs">
+                                    <div className="w-4 h-4 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center text-[10px] font-bold">
+                                        R
+                                    </div>
+                                    <span className="font-semibold text-white">{getRepoName(repo) || 'Workspace'}</span>
+                                    <span className="text-zinc-600">›</span>
+                                    <span className="text-zinc-300 font-medium">
+                                        {activeTab === 'chat' ? 'AI Chat' : activeTab === 'projects' ? 'Projects' : activeTab === 'notes_pages' ? 'Pages & Notes' : activeTab === 'issues' ? 'GitHub Issues' : activeTab === 'notes' ? 'To-Do & Checklist' : activeTab === 'dashboard' ? 'Overview' : activeTab === 'arch' ? 'Architecture' : activeTab === 'analytics' ? 'Analytics' : 'PR Reviews'}
+                                    </span>
+                                    <Star className="w-3 h-3 text-amber-400 fill-amber-400/20" />
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[11px] font-mono text-zinc-500 hidden sm:inline">
+                                        {getRepoFullName(repo) || 'No repo selected'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Main Active Tab Content View */}
+                            <div className="flex-1 p-6 overflow-y-auto max-w-7xl w-full mx-auto">
+                                <AnimatePresence mode="wait">
+                                    {activeTab === 'chat' && (
+                                        <motion.div key="chat-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            {noRepo ? (
+                                                <NoRepoState tab="chat" onIngest={() => setActiveTab('projects')} />
+                                            ) : (
+                                                <AIChatView
+                                                    repoId={repo?.id}
+                                                    repoName={getRepoName(repo)}
+                                                    repoUrl={repo?.url}
+                                                    userId={userId}
+                                                    savedRepos={savedRepos}
+                                                    onSelectRepo={selectRepo}
+                                                    onFileClick={handleFileClick}
+                                                />
+                                            )}
+                                        </motion.div>
+                                    )}
+
+                                    {activeTab === 'projects' && (
+                                        <motion.div key="projects-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            <ProjectsView onIngest={handleIngest} isIngesting={isIngesting} />
+                                        </motion.div>
+                                    )}
+
+                                    {activeTab === 'notes_pages' && (
+                                        <motion.div key="notes-pages-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            <NotesPagesView repoId={repo?.id} userId={userId} />
+                                        </motion.div>
+                                    )}
+
+                                    {activeTab === 'dashboard' && (
+                                        <motion.div key="dashboard-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            {noRepo ? (
+                                                <NoRepoState tab="analyzer" onIngest={() => setActiveTab('projects')} />
+                                            ) : (
+                                                <RepoAnalyzer
+                                                    repoName={getRepoName(repo)}
+                                                    repoUrl={repo?.url || ''}
+                                                    languages={repo?.languagesJson || repo?.languages_json || null}
+                                                    analysis={(repo?.analysisJson as any) || (repo?.analysis_json as any) || null}
+                                                    onFileClick={handleFileClick}
+                                                />
+                                            )}
+                                        </motion.div>
+                                    )}
+
+                                    {activeTab === 'arch' && (
+                                        <motion.div key="arch-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            {noRepo ? (
+                                                <NoRepoState tab="arch" onIngest={() => setActiveTab('projects')} />
+                                            ) : (
+                                                <ArchFlow repoName={getRepoName(repo)} />
+                                            )}
+                                        </motion.div>
+                                    )}
+
+                                    {activeTab === 'issues' && (
+                                        <motion.div key="issues-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            {noRepo ? (
+                                                <NoRepoState tab="issues" onIngest={() => setActiveTab('projects')} />
+                                            ) : (
+                                                <GithubIssuesPanel
+                                                    repoName={getRepoName(repo)}
+                                                    repoUrl={repo?.url || ''}
+                                                    repoId={repo?.id}
+                                                />
+                                            )}
+                                        </motion.div>
+                                    )}
+
+                                    {activeTab === 'notes' && (
+                                        <motion.div key="notes-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            <CodeReviewNotes repoId={repo?.id} userId={userId} />
+                                        </motion.div>
+                                    )}
+
+                                    {activeTab === 'analytics' && (
+                                        <motion.div key="analytics-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            <DevAnalytics repoName={getRepoName(repo)} repoUrl={noRepo ? '' : repo?.url || ''} />
+                                        </motion.div>
+                                    )}
+
+                                    {activeTab === 'pr' && (
+                                        <motion.div key="pr-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                            {noRepo ? (
+                                                <NoRepoState tab="pr" onIngest={() => setActiveTab('projects')} />
+                                            ) : (
+                                                <PRReviewPanel repoId={repo?.id} userId={userId} onFileClick={handleFileClick} />
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        </div>
+
+                        {/* Ingested Repos Overlay Modal */}
+                        <AnimatePresence>
+                            {isReposOverlayOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+                                    onClick={() => setIsReposOverlayOpen(false)}
+                                >
+                                    <motion.div
+                                        initial={{ scale: 0.95 }}
+                                        animate={{ scale: 1 }}
+                                        exit={{ scale: 0.95 }}
+                                        className="bg-[#121215] border border-white/10 rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                                            <div className="flex items-center gap-2">
+                                                <FolderGit2 className="w-5 h-5 text-blue-400" />
+                                                <h3 className="text-base font-bold text-white">Ingested Repositories</h3>
+                                            </div>
+                                            <button
+                                                onClick={() => setIsReposOverlayOpen(false)}
+                                                className="text-zinc-500 hover:text-white text-xs font-mono"
+                                            >
+                                                [ESC] Close
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-[340px] overflow-y-auto">
+                                            {savedRepos.map((r) => (
+                                                <div
+                                                    key={r.id}
+                                                    onClick={() => {
+                                                        selectRepo(r);
+                                                        setIsReposOverlayOpen(false);
+                                                    }}
+                                                    className="p-3.5 rounded-xl bg-[#18181c] hover:bg-[#232328] border border-white/5 cursor-pointer flex items-center justify-between transition-all"
+                                                >
+                                                    <div>
+                                                        <div className="font-semibold text-white text-xs flex items-center gap-2">
+                                                            <FolderGit2 className="w-3.5 h-3.5 text-blue-400" />
+                                                            <span>{getRepoFullName(r)}</span>
+                                                        </div>
+                                                        <span className="text-[10px] font-mono text-zinc-500 block mt-1">
+                                                            Indexed: {new Date(getRepoIndexedAt(r)).toLocaleDateString()}
+                                                        </span>
+                                                    </div>
+                                                    <button className="px-3 py-1 rounded-lg bg-white/10 text-white text-xs font-medium">
+                                                        Select
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="pt-2 border-t border-white/5 flex justify-end">
+                                            <button
+                                                onClick={() => {
+                                                    setRepo(null);
+                                                    setIsReposOverlayOpen(false);
+                                                }}
+                                                className="px-4 py-2 rounded-xl bg-white text-black text-xs font-semibold"
+                                            >
+                                                + Ingest New Repo
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        {/* File Inspector Drawer */}
+                        {repo && (
+                            <FileInspector
+                                filePath={inspectingFile}
+                                repoId={repo.id}
+                                repoUrl={repo.url}
+                                userId={userId}
+                                onClose={() => setInspectingFile(null)}
+                            />
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Workspace Modals */}
+            <InboxModal isOpen={isInboxOpen} onClose={() => setIsInboxOpen(false)} />
+            <GithubProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
+            <TechTriviaModal isOpen={isTriviaOpen} onClose={() => setIsTriviaOpen(false)} />
+        </main>
+    );
 }
 
-function FeatureCard({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
-  return (
-    <div className="p-5 glass-card hover:bg-white/[0.03] transition-all group">
-      <div className="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center mb-3 border border-zinc-800 group-hover:border-zinc-700 transition-colors">
-        {icon}
-      </div>
-      <h3 className="text-white font-medium text-sm mb-1.5">{title}</h3>
-      <p className="text-zinc-500 text-xs leading-relaxed">{description}</p>
-    </div>
-  );
+function SidebarLink({ active, icon, label, badge, onClick }: {
+    active?: boolean;
+    icon: React.ReactNode;
+    label: string;
+    badge?: string;
+    onClick?: () => void;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className={`w-full text-left px-2 py-1.5 rounded-lg font-medium text-xs transition-all flex items-center justify-between ${
+                active ? 'bg-[#232328] text-white shadow-sm font-semibold' : 'text-zinc-400 hover:text-white hover:bg-[#1a1a1e]'
+            }`}
+        >
+            <span className="flex items-center gap-2">
+                <span className={active ? 'text-white' : 'text-zinc-500'}>{icon}</span>
+                <span>{label}</span>
+            </span>
+            {badge && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-zinc-300">
+                    {badge}
+                </span>
+            )}
+        </button>
+    );
+}
+
+function SidebarSubLink({ active, label, onClick }: {
+    active: boolean;
+    label: string;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className={`w-full text-left px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                active ? 'text-white font-semibold bg-white/5' : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+        >
+            {label}
+        </button>
+    );
+}
+
+function NoRepoState({ tab, onIngest }: {
+    tab: string;
+    onIngest: () => void;
+}) {
+    const labels: Record<string, string> = {
+        chat: 'Chat with your codebase',
+        analyzer: 'Analyze repository architecture',
+        arch: 'View architecture diagrams',
+        issues: 'Browse GitHub issues',
+        pr: 'Review pull requests',
+    };
+    return (
+        <div className="flex flex-col items-center justify-center py-20 space-y-5 text-center">
+            <div className="p-5 rounded-2xl bg-[#1a1a1e] border border-white/10">
+                <FolderGit2 className="w-10 h-10 text-zinc-500" />
+            </div>
+            <div className="space-y-2">
+                <h3 className="text-base font-semibold text-white">{labels[tab] || 'No Repository'}</h3>
+                <p className="text-xs text-zinc-500 max-w-sm">
+                    Ingest a GitHub repository to unlock this feature.
+                </p>
+            </div>
+            <button
+                onClick={onIngest}
+                className="px-5 py-2.5 rounded-xl bg-[#5e6ad2] hover:bg-[#4b57c6] text-white text-xs font-semibold flex items-center gap-2 transition-all shadow-md"
+            >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Ingest a Repository</span>
+            </button>
+        </div>
+    );
 }

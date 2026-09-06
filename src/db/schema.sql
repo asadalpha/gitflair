@@ -10,6 +10,8 @@ create table if not exists repositories (
   full_name text not null,
   created_at timestamp with time zone default now(),
   indexed_at timestamp with time zone,
+  analysis_json jsonb,
+  languages_json jsonb,
   unique(url, user_id) -- same repo can be indexed by different users
 );
 
@@ -22,7 +24,7 @@ create table if not exists code_chunks (
   start_line integer not null,
   end_line integer not null,
   language text not null,
-  embedding vector(3072), -- gemini-embedding-001 outputs 3072 dimensions by default
+  embedding vector(384), -- Xenova/all-MiniLM-L6-v2 outputs 384 dimensions
   created_at timestamp with time zone default now()
 );
 
@@ -37,6 +39,41 @@ create table if not exists qa_history (
   created_at timestamp with time zone default now()
 );
 
+-- Pull Request Reviews table
+create table if not exists pr_reviews (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null default 'anonymous',
+  repo_id uuid references repositories(id) on delete cascade,
+  pr_number integer not null,
+  title text not null,
+  status text not null default 'pending', -- pending, completed, failed
+  summary text,
+  score integer, -- 0 to 100 code quality rating
+  file_reviews jsonb, -- array of { file_path, comments: [ { line, type, text } ] }
+  created_at timestamp with time zone default now(),
+  unique(repo_id, pr_number, user_id)
+);
+
+create index if not exists idx_pr_reviews_repo_id on pr_reviews(repo_id);
+
+-- Repo-wise Code Notes table
+create table if not exists code_notes (
+  id uuid primary key default gen_random_uuid(),
+  repo_id uuid references repositories(id) on delete cascade,
+  user_id text not null default 'anonymous',
+  code text not null,
+  title text not null,
+  completed boolean not null default false,
+  category text not null default 'logic',
+  assignee text not null default 'Alpha',
+  date text not null default 'Today',
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
+create index if not exists idx_code_notes_repo_id on code_notes(repo_id);
+create index if not exists idx_code_notes_user_id on code_notes(user_id);
+
 -- Indexes for user scoping
 create index if not exists idx_repos_user_id on repositories(user_id);
 create index if not exists idx_history_user_id on qa_history(user_id);
@@ -46,7 +83,7 @@ create index idx_chunks_repo_id on code_chunks(repo_id);
 
 -- Vector similarity search function
 create or replace function match_code_chunks (
-  query_embedding vector(3072),
+  query_embedding vector(384),
   match_threshold float,
   match_count int,
   p_repo_id uuid
