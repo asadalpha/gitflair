@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import gsap from 'gsap';
 import RepoInput from '@/features/repos/components/repo-input';
 import ChatInterface from '@/features/chat/components/chat-interface';
 import HistoryPanel from '@/features/chat/components/history-panel';
@@ -39,7 +40,10 @@ import {
     FileText,
     Star,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Bot,
+    Zap,
+    Shield
 } from 'lucide-react';
 
 interface Analysis {
@@ -101,6 +105,13 @@ export default function Home() {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isTriviaOpen, setIsTriviaOpen] = useState(false);
 
+    // GSAP Refs
+    const heroTitleRef = useRef<HTMLHeadingElement>(null);
+    const heroSubRef = useRef<HTMLParagraphElement>(null);
+    const heroCtaRef = useRef<HTMLDivElement>(null);
+    const mockWindowRef = useRef<HTMLDivElement>(null);
+    const aiCardRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         if (session?.user) {
             setUserId(session.user.id);
@@ -109,6 +120,55 @@ export default function Home() {
             setUserId(id);
         }
     }, [session]);
+
+    // GSAP Entrance & Floating Animations
+    useEffect(() => {
+        if (repo) return; // Only run on landing view
+
+        const ctx = gsap.context(() => {
+            // Hero text animation
+            if (heroTitleRef.current) {
+                gsap.fromTo(
+                    heroTitleRef.current,
+                    { y: 30, opacity: 0 },
+                    { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out' }
+                );
+            }
+            if (heroSubRef.current) {
+                gsap.fromTo(
+                    heroSubRef.current,
+                    { y: 20, opacity: 0 },
+                    { y: 0, opacity: 1, duration: 0.8, delay: 0.15, ease: 'power3.out' }
+                );
+            }
+            if (heroCtaRef.current) {
+                gsap.fromTo(
+                    heroCtaRef.current,
+                    { y: 20, opacity: 0 },
+                    { y: 0, opacity: 1, duration: 0.8, delay: 0.25, ease: 'power3.out' }
+                );
+            }
+            if (mockWindowRef.current) {
+                gsap.fromTo(
+                    mockWindowRef.current,
+                    { y: 40, opacity: 0, scale: 0.98 },
+                    { y: 0, opacity: 1, scale: 1, duration: 1, delay: 0.35, ease: 'power3.out' }
+                );
+            }
+            // AI Floating card subtle infinite animation
+            if (aiCardRef.current) {
+                gsap.to(aiCardRef.current, {
+                    y: -8,
+                    duration: 2.5,
+                    repeat: -1,
+                    yoyo: true,
+                    ease: 'sine.inOut',
+                });
+            }
+        });
+
+        return () => ctx.revert();
+    }, [repo]);
 
     // Load previously indexed repos for this user
     useEffect(() => {
@@ -219,7 +279,7 @@ export default function Home() {
         <main className="min-h-screen relative bg-[#08080a] text-zinc-200 selection:bg-blue-500/30 selection:text-white font-sans">
             <AnimatePresence mode="wait">
                 {!repo ? (
-                    /* ───── Exact Dark Minimal Landing View Matching Screenshot ───── */
+                    /* ───── Exact Dark Minimal Landing View with GSAP Animations & Corrected Content ───── */
                     <motion.div
                         key="landing"
                         initial={{ opacity: 0 }}
@@ -281,21 +341,27 @@ export default function Home() {
                             </div>
                         </header>
 
-                        {/* Main Hero Header */}
+                        {/* Main Hero Header (Animated with GSAP) */}
                         <div className="max-w-7xl mx-auto px-6 sm:px-12 pt-16 pb-8 w-full space-y-4">
                             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                                 <div className="max-w-3xl space-y-3">
-                                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight text-white leading-[1.1]">
+                                    <h1
+                                        ref={heroTitleRef}
+                                        className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight text-white leading-[1.1]"
+                                    >
                                         AI architect & repo analyzer
                                     </h1>
-                                    <p className="text-sm sm:text-base text-zinc-400 font-normal">
+                                    <p
+                                        ref={heroSubRef}
+                                        className="text-sm sm:text-base text-zinc-400 font-normal"
+                                    >
                                         Index any GitHub repo, chat with your codebase, and get AI-powered architecture insights.
                                     </p>
                                 </div>
                             </div>
 
                             {/* Workspaces & Navigation CTAs */}
-                            <div id="ingest" className="pt-4 space-y-4">
+                            <div ref={heroCtaRef} id="ingest" className="pt-4 space-y-4">
                                 {savedRepos.length > 0 ? (
                                     <div className="flex flex-wrap items-center gap-3">
                                         <button
@@ -330,10 +396,14 @@ export default function Home() {
                             </div>
                         </div>
 
-                        {/* Hero Interactive Preview */}
+                        {/* Hero Interactive Preview Mockup Window (Corrected Text & Animated with GSAP) */}
                         <div className="max-w-7xl mx-auto px-6 sm:px-12 py-8 w-full">
-                            <div className="rounded-2xl border border-white/[0.08] bg-[#0c0c0e] shadow-2xl overflow-hidden relative">
+                            <div
+                                ref={mockWindowRef}
+                                className="rounded-2xl border border-white/[0.08] bg-[#0c0c0e] shadow-2xl overflow-hidden relative"
+                            >
                                 <div className="flex flex-col md:flex-row min-h-[420px]">
+                                    {/* Sidebar Mock */}
                                     <div className="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/[0.06] bg-[#09090b] p-3 space-y-4 shrink-0 select-none">
                                         <div className="flex items-center justify-between px-2 py-1 border-b border-white/5 pb-2">
                                             <div className="flex items-center gap-2">
@@ -347,63 +417,79 @@ export default function Home() {
 
                                         <div className="space-y-1 text-xs">
                                             <div className="px-2 py-1 text-zinc-400 hover:text-white flex items-center gap-2">
-                                                <span>⚡</span> Pulse
+                                                <Zap className="w-3.5 h-3.5 text-purple-400" /> AI Vector Search
                                             </div>
                                             <div className="px-2 py-1 text-zinc-400 hover:text-white flex items-center gap-2">
-                                                <span>📥</span> Inbox
+                                                <Inbox className="w-3.5 h-3.5 text-blue-400" /> Ingest Queue
                                             </div>
                                             <div className="px-2 py-1 text-zinc-400 hover:text-white flex items-center gap-2">
-                                                <span>🎯</span> My issues
+                                                <CheckSquare className="w-3.5 h-3.5 text-emerald-400" /> Action Items
                                             </div>
                                             <div className="px-2 py-1 text-zinc-400 hover:text-white flex items-center gap-2">
-                                                <span>🔀</span> Reviews
+                                                <GitPullRequest className="w-3.5 h-3.5 text-pink-400" /> PR Reviews
                                             </div>
                                         </div>
 
                                         <div className="space-y-1 text-xs pt-2 border-t border-white/5">
                                             <div className="px-2 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-                                                <span>Favorites</span>
+                                                <span>Workspaces</span>
                                                 <ChevronDown className="w-3 h-3 text-zinc-500" />
                                             </div>
                                             <div className="px-2 py-1 text-white bg-white/5 rounded-lg flex items-center gap-2 font-medium">
-                                                <span className="text-amber-400">🟡</span> Faster app launch
+                                                <span className="w-2 h-2 rounded-full bg-emerald-400" /> order-supervisor-ai
                                             </div>
-                                            <div className="px-2 py-1 text-zinc-400">Agent tasks</div>
-                                            <div className="px-2 py-1 text-zinc-400">UI Refresh</div>
+                                            <div className="px-2 py-1 text-zinc-400">gitflair-core</div>
+                                            <div className="px-2 py-1 text-zinc-400">temporal-worker</div>
                                         </div>
                                     </div>
 
+                                    {/* Main Content Mock */}
                                     <div className="flex-1 p-6 space-y-6 relative bg-[#0e0e11] text-xs">
                                         <div className="flex items-center justify-between text-zinc-400 border-b border-white/5 pb-3">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-amber-400">🟡</span>
-                                                <span className="font-mono text-white font-semibold">DRV-8852 Faster app launch</span>
-                                                <Star className="w-3.5 h-3.5 text-amber-400" />
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                                    GF-1042
+                                                </span>
+                                                <span className="font-mono text-white font-semibold">Autonomous Vector Indexing & Code Architecture</span>
+                                                <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
                                             </div>
                                             <div className="flex items-center gap-3 font-mono text-[11px] text-zinc-500">
-                                                <span>1 / 84</span>
-                                                <ChevronUp className="w-3.5 h-3.5" />
-                                                <ChevronDown className="w-3.5 h-3.5" />
+                                                <span>1 / 42</span>
+                                                <ChevronUp className="w-3.5 h-3.5 cursor-pointer hover:text-white" />
+                                                <ChevronDown className="w-3.5 h-3.5 cursor-pointer hover:text-white" />
                                             </div>
                                         </div>
+
                                         <div className="space-y-3 max-w-xl">
-                                            <h2 className="text-xl font-bold text-white tracking-tight">Faster app launch</h2>
+                                            <h2 className="text-xl font-bold text-white tracking-tight">Automate Codebase Indexing & Vector Search</h2>
                                             <p className="text-xs text-zinc-400 leading-relaxed font-sans">
-                                                Render UI before <code className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-zinc-200 text-[11px]">vehicle_state</code> sync when minimum required state is present, instead of blocking on full refresh during startup.
+                                                Index any GitHub repository in seconds, generate interactive architectural specs, and run long-running AI code analysis workflows with full context awareness using <code className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-purple-300 text-[11px]">Supabase PgVector</code> and <code className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-emerald-300 text-[11px]">Temporal SDK</code>.
                                             </p>
                                         </div>
-                                        <div className="absolute bottom-6 right-6 w-80 rounded-2xl bg-[#141418] border border-white/10 shadow-2xl p-4 space-y-3 backdrop-blur-md hidden sm:block">
+
+                                        {/* AI Floating Card Overlay (GSAP Yoyo Float Animation) */}
+                                        <div
+                                            ref={aiCardRef}
+                                            className="absolute bottom-6 right-6 w-84 rounded-2xl bg-[#141418] border border-purple-500/20 shadow-2xl p-4 space-y-3 backdrop-blur-md hidden sm:block"
+                                        >
                                             <div className="flex items-center justify-between text-xs text-white border-b border-white/5 pb-2">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-4 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center text-[10px] font-bold">🤖</div>
-                                                    <span className="font-semibold">GitFlair <span className="text-purple-400">AI</span></span>
+                                                    <div className="w-5 h-5 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center text-[11px] font-bold border border-purple-500/30">
+                                                        <Bot className="w-3.5 h-3.5 text-purple-400" />
+                                                    </div>
+                                                    <span className="font-semibold text-white">GitFlair <span className="text-purple-400 font-bold">AI Agent</span></span>
                                                 </div>
+                                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                                    COMPLETED
+                                                </span>
                                             </div>
-                                            <div className="p-3 rounded-xl bg-[#1c1c22] border border-white/5 text-xs text-white font-medium">
-                                                Fix the dimmed ride rows that never reset and open a PR
+
+                                            <div className="p-3 rounded-xl bg-[#1c1c22] border border-white/5 text-xs text-zinc-200 font-medium">
+                                                Analyze order-supervisor-ai repo structure and generate architectural spec
                                             </div>
+
                                             <p className="text-zinc-300 text-[11px] leading-relaxed">
-                                                Pushed a draft PR. Removed dimmedIds — isItemDimmed now checks waitingStatusById directly.
+                                                Parsed 4,210 lines across FastAPI, Next.js & Temporal. Indexed vector embeddings and generated 3 prioritized security action items.
                                             </p>
                                         </div>
                                     </div>
