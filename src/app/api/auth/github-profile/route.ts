@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const usernameParam = searchParams.get("username");
 
-    let token: string | null = null;
+    let userGhToken: string | null = null;
 
     if (session) {
       const [ghAccount] = await db
@@ -25,31 +25,40 @@ export async function GET(request: NextRequest) {
           ),
         )
         .limit(1);
-      token = ghAccount?.accessToken ?? null;
+      userGhToken = ghAccount?.accessToken ?? null;
     }
 
-    if (!token) {
-      const envToken = process.env.GITHUB_TOKEN;
-      if (envToken && envToken.length > 10 && !envToken.includes("your_") && !envToken.includes("placeholder")) {
-        token = envToken;
-      }
-    }
-
-    if (!token && !usernameParam) {
+    // If user has not linked their own GitHub account via OAuth and provided no username param,
+    // prompt the user to link GitHub or enter their username (do NOT default to process.env.GITHUB_TOKEN owner)
+    if (!userGhToken && !usernameParam) {
       return NextResponse.json({
         error: "No GitHub account linked. Link GitHub or enter your username below.",
         needsUsername: true,
       });
     }
 
-    const octokit = new Octokit(token ? { auth: token } : {});
+    // Determine fallback token for API rate limit increase when searching by username
+    let apiToken: string | null = userGhToken;
+    if (!apiToken) {
+      const envToken = process.env.GITHUB_TOKEN;
+      if (envToken && envToken.length > 10 && !envToken.includes("your_") && !envToken.includes("placeholder")) {
+        apiToken = envToken;
+      }
+    }
+
+    const octokit = new Octokit(apiToken ? { auth: apiToken } : {});
 
     let username: string;
-    if (token && !usernameParam) {
-      const { data: ghUser } = await octokit.rest.users.getAuthenticated();
+    let ghUser: any;
+
+    if (userGhToken && !usernameParam) {
+      const { data } = await octokit.rest.users.getAuthenticated();
+      ghUser = data;
       username = ghUser.login;
     } else if (usernameParam) {
-      username = usernameParam;
+      const { data } = await octokit.rest.users.getByUsername({ username: usernameParam });
+      ghUser = data;
+      username = ghUser.login;
     } else {
       return NextResponse.json({
         error: "Unable to authenticate with GitHub. Enter your username below.",
@@ -57,12 +66,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const { data: ghUser } = token && !usernameParam
-      ? await octokit.rest.users.getAuthenticated()
-      : await octokit.rest.users.getByUsername({ username });
-
-    const isAuthed = !!token && !usernameParam;
-    const { data: repos } = isAuthed
+    const isAuthedUser = !!userGhToken && !usernameParam;
+    const { data: repos } = isAuthedUser
       ? await octokit.rest.repos.listForAuthenticatedUser({ sort: "updated", per_page: 100, visibility: "all" })
       : await octokit.rest.repos.listForUser({ username: ghUser.login, sort: "updated", per_page: 100 });
 
@@ -80,24 +85,24 @@ export async function GET(request: NextRequest) {
       .slice(0, 6)
       .map(([name, count]) => ({ name, count }));
 
-    // Fetch recent commits (last 30 events)
+    // Fetch recent commits / PRs (last 30 events)
     let recentCommits = 0;
     let recentPRs = 0;
     try {
-      const { data: events } = await octokit.rest.activity.listEventsForAuthenticatedUser({
-        username: ghUser.login,
-        per_page: 30,
-      });
+      const { data: events } = isAuthedUser
+        ? await octokit.rest.activity.listEventsForAuthenticatedUser({ username: ghUser.login, per_page: 30 })
+        : await octokit.rest.activity.listPublicEventsForUser({ username: ghUser.login, per_page: 30 });
+
       for (const ev of events) {
         if (ev.type === "PushEvent") recentCommits += (ev.payload as { commits?: unknown[] }).commits?.length ?? 1;
         if (ev.type === "PullRequestEvent") recentPRs += 1;
       }
     } catch {
-      // events may be empty for new users
+      // events may be empty or restricted for new/public users
     }
 
     return NextResponse.json({
-      linked: true,
+      linked: isAuthedUser,
       profile: {
         login: ghUser.login,
         name: ghUser.name,

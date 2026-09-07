@@ -131,7 +131,8 @@ export default function Home() {
         if (isLoggedIn && (!repo || repo.id === 'empty-workspace')) {
             if (savedRepos.length > 0) {
                 setRepo(savedRepos[0]);
-            } else {
+            } else if (!repo) {
+                setRepo({ id: 'empty-workspace', name: 'Workspace', url: '' });
                 setActiveTab('projects');
             }
         } else if (!isLoggedIn && repo) {
@@ -299,6 +300,7 @@ export default function Home() {
         if (savedRepos.length > 0) {
             selectRepo(savedRepos[0]);
         } else {
+            setRepo({ id: 'empty-workspace', name: 'Workspace', url: '' });
             setActiveTab('projects');
         }
     };
