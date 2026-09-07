@@ -66,6 +66,18 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "pageId is required" }, { status: 400 });
     }
 
+    const { user } = await requireAuth(req.headers);
+
+    const [owned] = await db
+      .select({ id: codePages.id })
+      .from(codePages)
+      .where(and(eq(codePages.id, pageId), eq(codePages.userId, user.id)))
+      .limit(1);
+
+    if (!owned) {
+      return NextResponse.json({ error: "Page not found" }, { status: 404 });
+    }
+
     const updates: { title?: string; content?: string; updatedAt: Date } = {
       updatedAt: new Date(),
     };
@@ -95,6 +107,18 @@ export async function DELETE(req: NextRequest) {
 
     if (!pageId) {
       return NextResponse.json({ error: "pageId is required" }, { status: 400 });
+    }
+
+    const { user } = await requireAuth(req.headers);
+
+    const [owned] = await db
+      .select({ id: codePages.id })
+      .from(codePages)
+      .where(and(eq(codePages.id, pageId), eq(codePages.userId, user.id)))
+      .limit(1);
+
+    if (!owned) {
+      return NextResponse.json({ error: "Page not found" }, { status: 404 });
     }
 
     await db.delete(codePages).where(eq(codePages.id, pageId));

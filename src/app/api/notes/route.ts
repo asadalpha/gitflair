@@ -74,6 +74,18 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "noteId is required" }, { status: 400 });
     }
 
+    const { user } = await requireAuth(req.headers);
+
+    const [owned] = await db
+      .select({ id: codeNotes.id })
+      .from(codeNotes)
+      .where(and(eq(codeNotes.id, noteId), eq(codeNotes.userId, user.id)))
+      .limit(1);
+
+    if (!owned) {
+      return NextResponse.json({ error: "Note not found" }, { status: 404 });
+    }
+
     const [updated] = await db
       .update(codeNotes)
       .set({ completed, updatedAt: new Date() })

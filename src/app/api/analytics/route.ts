@@ -156,15 +156,16 @@ export async function POST(request: NextRequest) {
           order: "desc",
         });
         for (const pr of userPRs.items) {
+          const isMerged = pr.state === "closed" && !!pr.pull_request;
           prs.push({
             number: pr.number,
             title: pr.title,
-            state: pr.state ?? "open",
+            state: isMerged ? "merged" : pr.state ?? "open",
             createdAt: pr.created_at,
             url: pr.html_url,
           });
-          if (pr.pull_request?.merged_at && pr.created_at) {
-            const diff = new Date(pr.pull_request.merged_at).getTime() - new Date(pr.created_at).getTime();
+          if (isMerged && pr.closed_at && pr.created_at) {
+            const diff = new Date(pr.closed_at).getTime() - new Date(pr.created_at).getTime();
             mergeTimes.push(diff / 3_600_000);
           }
         }

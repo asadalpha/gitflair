@@ -17,7 +17,7 @@ import {
   analyzeRepository,
 } from "@/lib/gemini";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {
@@ -112,7 +112,12 @@ export async function POST(req: NextRequest) {
 
     // 2. Fetch contents from GitHub with user's token
     const octokit = await createOctokitForUser(user.id);
-    const files = await fetchRepoContents(owner, repoName, octokit);
+    const allFiles = await fetchRepoContents(owner, repoName, octokit);
+
+    // Cap the number of files processed in a single request to stay within
+    // serverless time limits. Prioritize source files over docs/config.
+    const MAX_FILES = 400;
+    const files = allFiles.length > MAX_FILES ? allFiles.slice(0, MAX_FILES) : allFiles;
 
     // 3. Process files (chunking & embeddings)
     const FILE_CONCURRENCY = 3;
@@ -195,6 +200,8 @@ export async function POST(req: NextRequest) {
       message: "Indexing complete",
       repositoryId: repoId,
       filesProcessed: files.length,
+      totalFiles: allFiles.length,
+      capped: allFiles.length > MAX_FILES,
     });
   } catch (error: unknown) {
     console.error("Ingest error:", error);

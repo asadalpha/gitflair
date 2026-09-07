@@ -103,10 +103,12 @@ export async function getOrCreateUserAndWorkspace(
     currentUser = inserted;
   }
 
-  // 2. Ensure workspace exists in 'workspace' & 'workspace_member' tables
+  // 2. Ensure workspace exists in 'workspace' & 'workspace_member' tables.
+  // Slug uses the full userId (sanitized) — the old 8-char slice collided
+  // between users sharing a name prefix, breaking workspace creation.
   let wsResult = await getUserWorkspace(userId);
   if (!wsResult) {
-    const slug = `ws-${userId.slice(0, 8)}`;
+    const slug = `ws-${userId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16)}`;
     const [newWs] = await db
       .insert(workspace)
       .values({
@@ -130,6 +132,12 @@ export async function getOrCreateUserAndWorkspace(
     wsResult = await getUserWorkspace(userId);
   }
 
+  if (!wsResult) {
+    throw new Error(
+      "Failed to create or retrieve a workspace for the user. Cannot proceed.",
+    );
+  }
+
   const userObj: SessionUser = {
     id: userId,
     name: currentUser?.name || "Anonymous User",
@@ -149,18 +157,7 @@ export async function getOrCreateUserAndWorkspace(
 
   return {
     session: authSession,
-    workspace: wsResult
-      ? wsResult.workspace
-      : {
-          id: "default-ws-id",
-          name: "Personal Workspace",
-          slug: `ws-${userId.slice(0, 8)}`,
-          description: null,
-          logoUrl: null,
-          createdById: userId,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
+    workspace: wsResult.workspace,
   };
 }
 

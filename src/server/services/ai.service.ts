@@ -160,6 +160,20 @@ export async function generateCompletion(prompt: string, jsonMode: boolean = fal
     }
 }
 
+/**
+ * Extract the first valid JSON object from an LLM response that may contain
+ * markdown fences, prose, or safety prefixes (e.g. "User Safety: safe{...}").
+ */
+function extractJson(text: string): string {
+    let cleaned = text.replace(/^```json\s*/i, "").replace(/```$/g, "").trim();
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+    }
+    return cleaned;
+}
+
 export async function* generateCompletionStream(prompt: string, jsonMode: boolean = false): AsyncGenerator<string> {
     const openrouterKey = process.env.OPENROUTER_API_KEY;
     const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
@@ -313,8 +327,7 @@ Ensure your response is valid JSON and contains only the JSON object. Do not inc
 
     try {
         const text = await generateCompletion(prompt, true);
-        const cleanJson = text.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
-        return JSON.parse(cleanJson);
+        return JSON.parse(extractJson(text));
     } catch (error) {
         console.error("Repository analysis failed:", error);
         return {
@@ -361,8 +374,7 @@ Ensure your output is a valid JSON object. Do not include markdown code blocks.`
 
     try {
         const text = await generateCompletion(prompt, true);
-        const cleanJson = text.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
-        return JSON.parse(cleanJson);
+        return JSON.parse(extractJson(text));
     } catch (error) {
         console.error("PR review generation failed:", error);
         return {

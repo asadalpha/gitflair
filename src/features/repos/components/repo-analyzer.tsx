@@ -91,7 +91,7 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
                 percentage: (lines / totalLines) * 100,
                 color: LANGUAGE_COLORS[name] || '#8b5cf6',
             }))
-            .sort((a, b) => (typeof a.lines === 'number' ? a.lines : 0) - (typeof b.lines === 'number' ? b.lines : 0))
+            .sort((a, b) => b.percentage - a.percentage)
         : DEFAULT_STACK;
 
     const copyToClipboard = (text: string, type: 'summary' | number) => {
