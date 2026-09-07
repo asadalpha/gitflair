@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShieldCheck, Github, Sparkles } from 'lucide-react';
 import { signIn } from '@/lib/auth-client';
+import { showToast } from '@/components/ui/toast';
 
 interface AuthModalProps {
     isOpen: boolean;
@@ -19,19 +20,27 @@ export default function AuthModal({
 }: AuthModalProps) {
     if (!isOpen) return null;
 
-    const handleGoogleAuth = () => {
+    const handleGoogleAuth = async () => {
         try {
-            signIn.social({ provider: 'google', callbackURL: window.location.href });
-        } catch {
-            window.location.href = '/api/auth/signin/google';
+            const res = await signIn.social({ provider: 'google', callbackURL: window.location.href });
+            if (res && (res as any).error) {
+                showToast((res as any).error.message || 'Google Sign-in failed', 'error');
+            }
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Google Sign-in failed';
+            showToast(msg, 'error');
         }
     };
 
-    const handleGithubAuth = () => {
+    const handleGithubAuth = async () => {
         try {
-            signIn.social({ provider: 'github', callbackURL: window.location.href });
-        } catch {
-            window.location.href = '/api/auth/signin/github';
+            const res = await signIn.social({ provider: 'github', callbackURL: window.location.href });
+            if (res && (res as any).error) {
+                showToast((res as any).error.message || 'GitHub Sign-in failed', 'error');
+            }
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'GitHub Sign-in failed';
+            showToast(msg, 'error');
         }
     };
 
@@ -77,7 +86,7 @@ export default function AuthModal({
                     <div className="space-y-3 pt-2">
                         <button
                             onClick={handleGoogleAuth}
-                            className="w-full p-3.5 rounded-xl bg-[#1a1a1e] hover:bg-white hover:text-black border border-white/10 flex items-center justify-center gap-3 transition-all font-semibold text-xs text-white shadow-sm group"
+                            className="w-full p-3.5 rounded-xl bg-[#1a1a1e] hover:bg-white hover:text-black border border-white/10 flex items-center justify-center gap-3 transition-all font-semibold text-xs text-white shadow-sm group cursor-pointer"
                         >
                             <svg className="w-4 h-4" viewBox="0 0 24 24">
                                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -90,7 +99,7 @@ export default function AuthModal({
 
                         <button
                             onClick={handleGithubAuth}
-                            className="w-full p-3.5 rounded-xl bg-[#1a1a1e] hover:bg-white hover:text-black border border-white/10 flex items-center justify-center gap-3 transition-all font-semibold text-xs text-white shadow-sm group"
+                            className="w-full p-3.5 rounded-xl bg-[#1a1a1e] hover:bg-white hover:text-black border border-white/10 flex items-center justify-center gap-3 transition-all font-semibold text-xs text-white shadow-sm group cursor-pointer"
                         >
                             <Github className="w-4 h-4" />
                             <span>Continue with GitHub</span>
