@@ -1,29 +1,18 @@
-import { GoogleGenAI } from "@google/genai";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { Document } from "@langchain/core/documents";
-import { env, pipeline } from "@xenova/transformers";
+import { randomUUID } from "node:crypto";
 
-// Disable local models loading in Next.js backend bundle
-env.allowLocalModels = false;
-
-// ── @google/genai SDK ──
-const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GENAI_API_KEY || "placeholder" });
-
-let embedder: any = null;
-
-async function getEmbedder() {
-    if (!embedder) {
-        embedder = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-    }
-    return embedder;
-}
+const EMBEDDING_DIMENSIONS = 1024;
+const OPENROUTER_EMBEDDING_MODEL = "liquid/lfm-2.5-embedding-350m:free";
+const EMBEDDING_INPUT_CHAR_LIMIT = 1600;
 
 /**
- * Fast, 384-dimensional fallback vector generator for Vercel Serverless environments
- * where ONNX native binaries in @xenova/transformers cannot run.
+ * Deterministic 1024-dimensional fallback used only when OpenRouter embeddings
+ * are unavailable. It keeps ingestion usable, but is not a replacement for
+ * the semantic embedding model.
  */
 function fallbackEmbed(text: string): number[] {
-    const dim = 384;
+    const dim = EMBEDDING_DIMENSIONS;
     const vector = new Array(dim).fill(0);
     let hash = 0;
     for (let i = 0; i < text.length; i++) {
@@ -37,7 +26,7 @@ function fallbackEmbed(text: string): number[] {
 }
 
 /**
- * Check if the error is a Gemini API quota exceeded (rate limit) error.
+ * Check if the error is an AI API quota exceeded (rate limit) error.
  */
 export function isQuotaExceeded(error: unknown): boolean {
     if (!error) return false;
@@ -51,113 +40,124 @@ export function isQuotaExceeded(error: unknown): boolean {
 
 /**
  * Embed a single query string.
- * Returns a number[] vector (384 dimensions) suitable for pgvector.
+ * Returns a number[] vector (1024 dimensions) suitable for pgvector.
  */
 export async function embedQuery(text: string): Promise<number[]> {
     try {
-        const generateEmbedding = await getEmbedder();
-        const output = await generateEmbedding(text, {
-            pooling: "mean",
-            normalize: true,
-        });
-        return Array.from(output.data);
+        const [embedding] = await requestOpenRouterEmbeddings([text]);
+        return embedding;
     } catch (error) {
-        console.warn("[EMBED] Local model unavailable on serverless, using normalized vector fallback:", error);
+        console.warn("[EMBED] OpenRouter embedding failed, using normalized fallback:", error);
         return fallbackEmbed(text);
     }
 }
 
 /**
- * Embed multiple documents locally.
+ * Embed multiple documents through OpenRouter.
  * Returns an array of number[] vectors, one per input string.
  */
 export async function embedDocuments(texts: string[]): Promise<number[][]> {
     try {
-        const generateEmbedding = await getEmbedder();
-        const allEmbeddings: number[][] = [];
-        for (const text of texts) {
-            const output = await generateEmbedding(text, {
-                pooling: "mean",
-                normalize: true,
-            });
-            allEmbeddings.push(Array.from(output.data));
-        }
-        return allEmbeddings;
+        return await requestOpenRouterEmbeddings(texts);
     } catch (error) {
-        console.warn("[EMBED] Batch document embedding failed on serverless, using normalized vector fallbacks:", error);
+        console.warn("[EMBED] OpenRouter batch embedding failed, using normalized fallbacks:", error);
         return texts.map(t => fallbackEmbed(t));
     }
 }
 
+async function requestOpenRouterEmbeddings(texts: string[]): Promise<number[][]> {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
+
+    const input = texts.map((text) => text.slice(0, EMBEDDING_INPUT_CHAR_LIMIT));
+    let response: Response | undefined;
+    let lastError = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      response = await fetch("https://openrouter.ai/api/v1/embeddings", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            "HTTP-Referer": "https://gitflair.ai",
+            "X-Title": "GitFlair",
+        },
+        body: JSON.stringify({
+            model: process.env.OPENROUTER_EMBEDDING_MODEL || OPENROUTER_EMBEDDING_MODEL,
+            input,
+        }),
+      });
+      if (response.ok || (response.status !== 429 && response.status !== 503)) break;
+      lastError = await response.text().catch(() => "");
+      await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+    }
+
+    if (!response || !response.ok) {
+        const errText = response ? await response.text().catch(() => "") : "";
+        throw new Error(`OpenRouter embeddings API error: ${response?.status ?? 503} ${errText || lastError}`);
+    }
+
+    const data = await response.json();
+    const embeddings = (data.data || [])
+        .sort((a: { index?: number }, b: { index?: number }) => (a.index ?? 0) - (b.index ?? 0))
+        .map((item: { embedding?: number[] }) => item.embedding);
+
+    if (embeddings.length !== texts.length || embeddings.some((v: number[] | undefined) => v?.length !== EMBEDDING_DIMENSIONS)) {
+        throw new Error(`Expected ${texts.length} embeddings with ${EMBEDDING_DIMENSIONS} dimensions`);
+    }
+    return embeddings as number[][];
+}
+
 /**
- * A generalized completion client.
- * Calls OpenRouter if OPENROUTER_API_KEY is defined, otherwise falls back
- * to the direct Google GenAI SDK.
+ * LLM routing: OpenRouter's free model first, then OpenCode Go if OpenRouter
+ * is unavailable or returns an error. OpenCode Go deliberately does not
+ * provide embeddings; OpenRouter handles embeddings above.
  */
 export async function generateCompletion(prompt: string, jsonMode: boolean = false): Promise<string> {
-    const openrouterKey = process.env.OPENROUTER_API_KEY;
-    const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
-
-    if (openrouterKey) {
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const body: any = {
-                model: model,
-                messages: [
-                    { role: "user", content: prompt }
-                ]
-            };
-            if (jsonMode) {
-                body.response_format = { type: "json_object" };
-            }
-
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${openrouterKey}`,
-                    "HTTP-Referer": "https://gitflair.ai",
-                    "X-Title": "GitFlair",
-                },
-                body: JSON.stringify(body)
-            });
-
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`OpenRouter API error: ${response.status} ${errText}`);
-            }
-
-            const data = await response.json();
-            const text = data.choices?.[0]?.message?.content;
-            if (!text) {
-                throw new Error("Empty response from OpenRouter");
-            }
-            return text;
-        } catch (error) {
-            console.error("OpenRouter API call failed, falling back to direct Gemini SDK:", error);
-        }
-    }
-
-    // Direct Google GenAI SDK Fallback
     try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const config: any = {};
-        if (jsonMode) {
-            config.responseMimeType = "application/json";
-        }
-        const res = await genai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: config
-        });
-
-        return res.text ?? "";
-    } catch (error) {
-        if (isQuotaExceeded(error)) {
-            throw new Error("Gemini API quota exceeded. Please try again in a minute.");
-        }
-        throw error;
+        return await requestChatCompletion("openrouter", prompt, jsonMode);
+    } catch (openRouterError) {
+        console.warn("[LLM] OpenRouter failed; trying OpenCode Go:", openRouterError);
+        return requestChatCompletion("opencode", prompt, jsonMode);
     }
+}
+
+type CompletionProvider = "openrouter" | "opencode";
+
+async function requestChatCompletion(provider: CompletionProvider, prompt: string, jsonMode: boolean): Promise<string> {
+    const apiKey = provider === "openrouter" ? process.env.OPENROUTER_API_KEY : process.env.OPENCODE_GO_API_KEY;
+    if (!apiKey) throw new Error(`${provider === "openrouter" ? "OPENROUTER_API_KEY" : "OPENCODE_GO_API_KEY"} is not configured`);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body: any = {
+        model: provider === "openrouter"
+            ? (process.env.OPENROUTER_MODEL || "openrouter/free")
+            : (process.env.OPENCODE_GO_MODEL || "glm-5.3-flash"),
+        messages: [{ role: "user", content: prompt }],
+    };
+    if (jsonMode) body.response_format = { type: "json_object" };
+
+    const baseUrl = provider === "openrouter"
+        ? "https://openrouter.ai/api/v1"
+        : (process.env.OPENCODE_GO_BASE_URL || "https://opencode.ai/zen/go/v1");
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            ...(provider === "openrouter"
+                ? { "HTTP-Referer": "https://gitflair.ai", "X-Title": "GitFlair" }
+                : { "User-Agent": "GitFlair/1.0", "x-opencode-session": randomUUID() }),
+        },
+        body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        throw new Error(`${provider} chat API error: ${response.status} ${errText}`);
+    }
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content;
+    if (typeof text !== "string" || !text) throw new Error(`Empty response from ${provider}`);
+    return text;
 }
 
 /**
@@ -175,82 +175,43 @@ function extractJson(text: string): string {
 }
 
 export async function* generateCompletionStream(prompt: string, jsonMode: boolean = false): AsyncGenerator<string> {
-    const openrouterKey = process.env.OPENROUTER_API_KEY;
-    const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
-
-    if (openrouterKey) {
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const body: any = {
-                model: model,
-                messages: [{ role: "user", content: prompt }],
-                stream: true,
-            };
-            if (jsonMode) {
-                body.response_format = { type: "json_object" };
-            }
-
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${openrouterKey}`,
-                    "HTTP-Referer": "https://gitflair.ai",
-                    "X-Title": "GitFlair",
-                },
-                body: JSON.stringify(body),
-            });
-
-            if (!response.ok || !response.body) {
-                const errText = await response.text().catch(() => "");
-                throw new Error(`OpenRouter API error: ${response.status} ${errText}`);
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n");
-                buffer = lines.pop() || "";
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed.startsWith("data: ")) continue;
-                    const payload = trimmed.slice(6);
-                    if (payload === "[DONE]") return;
-                    try {
-                        const json = JSON.parse(payload);
-                        const delta = json.choices?.[0]?.delta?.content;
-                        if (delta) yield delta;
-                    } catch {
-                        // skip malformed lines
-                    }
-                }
-            }
-            return;
-        } catch (error) {
-            console.error("OpenRouter stream failed, falling back to Gemini:", error);
-        }
+    try {
+        yield* streamChatCompletion("openrouter", prompt, jsonMode);
+    } catch (openRouterError) {
+        console.warn("[LLM] OpenRouter stream failed; trying OpenCode Go:", openRouterError);
+        yield* streamChatCompletion("opencode", prompt, jsonMode);
     }
+}
 
-    // Gemini fallback (non-streaming — collect then yield)
+async function* streamChatCompletion(provider: CompletionProvider, prompt: string, jsonMode: boolean): AsyncGenerator<string> {
+    const apiKey = provider === "openrouter" ? process.env.OPENROUTER_API_KEY : process.env.OPENCODE_GO_API_KEY;
+    if (!apiKey) throw new Error(`${provider} API key is not configured`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const config: any = {};
-    if (jsonMode) {
-        config.responseMimeType = "application/json";
-    }
-    const res = await genai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config,
+    const body: any = {
+        model: provider === "openrouter" ? (process.env.OPENROUTER_MODEL || "openrouter/free") : (process.env.OPENCODE_GO_MODEL || "glm-5.3-flash"),
+        messages: [{ role: "user", content: prompt }], stream: true,
+    };
+    if (jsonMode) body.response_format = { type: "json_object" };
+    const baseUrl = provider === "openrouter" ? "https://openrouter.ai/api/v1" : (process.env.OPENCODE_GO_BASE_URL || "https://opencode.ai/zen/go/v1");
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}`, ...(provider === "openrouter" ? { "HTTP-Referer": "https://gitflair.ai", "X-Title": "GitFlair" } : { "User-Agent": "GitFlair/1.0", "x-opencode-session": randomUUID() }) },
+        body: JSON.stringify(body),
     });
-    const text = res.text ?? "";
-    if (text) {
-        const chunks = text.match(/.{1,50}/g) || [text];
-        for (const c of chunks) yield c;
+    if (!response.ok || !response.body) throw new Error(`${provider} stream API error: ${response.status}`);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n"); buffer = lines.pop() || "";
+        for (const line of lines) {
+            const trimmed = line.trim(); if (!trimmed.startsWith("data: ")) continue;
+            const payload = trimmed.slice(6); if (payload === "[DONE]") return;
+            try { const delta = JSON.parse(payload).choices?.[0]?.delta?.content; if (delta) yield delta; } catch { /* Ignore malformed SSE events. */ }
+        }
     }
 }
 export async function chatWithContext(
@@ -291,7 +252,9 @@ export async function chatWithContextStream(
     chatHistory?: { role: string; content: string }[]
 ): Promise<AsyncGenerator<string>> {
     const prompt = buildChatPrompt(context, question, chatHistory);
-    return generateCompletionStream(prompt);
+    // Chat uses OpenCode Go directly. OpenRouter remains the primary/fallback
+    // router for background analysis and PR review generation.
+    return streamChatCompletion("opencode", prompt, false);
 }
 
 /**

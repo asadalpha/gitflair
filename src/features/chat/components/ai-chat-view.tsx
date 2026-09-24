@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
     ChevronDown,
-    Paperclip,
     ArrowUp,
     FolderGit2,
     Bot,
@@ -62,18 +61,49 @@ export default function AIChatView({
             const res = await fetch('/api/ask', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: query, repoId, userId }),
+                body: JSON.stringify({ question: query, repositoryId: repoId, userId }),
             });
-            const data = await res.json();
-            const aiMsg = {
-                role: 'assistant' as const,
-                text: data.answer || `Analyzed ${repoName} codebase context using vector embeddings. All PRs, issues, and architecture evaluated cleanly.`,
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.error || `Chat request failed (${res.status})`);
+            }
+            if (!res.body) throw new Error('Chat stream was empty');
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let answer = '';
+            let assistantStarted = false;
+            const updateAssistant = (text: string) => {
+                setMessages((prev) => {
+                    const withoutCurrent = assistantStarted ? prev.slice(0, -1) : prev;
+                    assistantStarted = true;
+                    return [...withoutCurrent, { role: 'assistant' as const, text }];
+                });
             };
-            setMessages((prev) => [...prev, aiMsg]);
-        } catch {
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const event = JSON.parse(line.slice(6));
+                    if (event.type === 'error') throw new Error(event.error || 'Chat request failed');
+                    if (event.type === 'token') {
+                        answer += event.text || '';
+                        updateAssistant(answer);
+                    }
+                }
+            }
+            if (!answer) throw new Error('OpenCode Go returned an empty answer');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Chat request failed';
             setMessages((prev) => [
                 ...prev,
-                { role: 'assistant', text: `Error connecting to AI agent for ${repoName}.` },
+                { role: 'assistant', text: `Chat error: ${message}` },
             ]);
         } finally {
             setIsLoading(false);
@@ -184,9 +214,6 @@ export default function AIChatView({
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                    <button className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-500 hover:text-white transition-colors">
-                                        <Paperclip className="w-4 h-4" />
-                                    </button>
                                     <button
                                         onClick={() => handleSend()}
                                         disabled={!prompt.trim() || isLoading}
@@ -257,4 +284,3 @@ export default function AIChatView({
         </div>
     );
 }
-

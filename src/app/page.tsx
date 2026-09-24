@@ -500,7 +500,7 @@ export default function Home() {
                                             </div>
 
                                             <p className="text-zinc-300 text-[11px] leading-relaxed">
-                                                Parsed 4,210 lines across FastAPI, Next.js & Temporal. Indexed vector embeddings and generated 3 prioritized security action items.
+                                            Repository analysis, indexed files, and prioritized findings appear here after you ingest a repository.
                                             </p>
                                         </div>
                                     </div>
@@ -794,7 +794,7 @@ export default function Home() {
 
                                     {activeTab === 'projects' && (
                                         <motion.div key="projects-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                                            <ProjectsView onIngest={handleIngest} isIngesting={isIngesting} />
+                                            <ProjectsView onIngest={handleIngest} isIngesting={isIngesting} repositories={savedRepos} userId={userId} />
                                         </motion.div>
                                     )}
 
@@ -825,7 +825,12 @@ export default function Home() {
                                             {noRepo ? (
                                                 <NoRepoState tab="arch" onIngest={() => setActiveTab('projects')} />
                                             ) : (
-                                                <ArchFlow repoName={getRepoName(repo)} />
+                                                <ArchFlow
+                                                    repoName={getRepoName(repo)}
+                                                    repoUrl={repo.url}
+                                                    languages={repo.languagesJson || repo.languages_json}
+                                                    analysis={repo.analysisJson || repo.analysis_json}
+                                                />
                                             )}
                                         </motion.div>
                                     )}

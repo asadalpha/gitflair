@@ -67,20 +67,13 @@ const LANGUAGE_COLORS: Record<string, string> = {
     JSON: '#292929',
 };
 
-const DEFAULT_STACK = [
-    { name: 'Python', percentage: 44, color: '#3572a5', lines: '4,210 lines' },
-    { name: 'TypeScript', percentage: 32, color: '#3178c6', lines: '2,890 lines' },
-    { name: 'FastAPI', percentage: 14, color: '#059669', lines: '1,420 lines' },
-    { name: 'SQL / Vector', percentage: 10, color: '#e38c00', lines: '980 lines' },
-];
-
 export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, onFileClick }: RepoAnalyzerProps) {
     const [selectedImprovement, setSelectedImprovement] = useState<number | null>(null);
     const [filterCategory, setFilterCategory] = useState<string>('ALL');
     const [copiedSummary, setCopiedSummary] = useState(false);
     const [copiedItem, setCopiedItem] = useState<number | null>(null);
 
-    // Calculate language percentages or fallback
+    // Calculate language percentages from GitHub's repository language totals.
     const langDetails = languages ? Object.entries(languages) : [];
     const totalLines = langDetails.reduce((sum, [, val]) => sum + val, 0);
     const languagesSorted = totalLines > 0
@@ -92,7 +85,7 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
                 color: LANGUAGE_COLORS[name] || '#8b5cf6',
             }))
             .sort((a, b) => b.percentage - a.percentage)
-        : DEFAULT_STACK;
+        : [];
 
     const copyToClipboard = (text: string, type: 'summary' | number) => {
         navigator.clipboard.writeText(text);
@@ -137,48 +130,19 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
         });
     };
 
-    const rawImprovements = analysis.improvements && analysis.improvements.length > 0
-        ? analysis.improvements
-        : [
-            {
-                title: 'Implement Sliding-Window Rate Limiting on Public Auth Endpoints',
-                desc: 'Prevent credential brute-forcing by wrapping FastAPI routers in backend/app/api with Redis or sliding-window rate limiters.',
-                files: ['backend/app/api/auth.py', 'backend/app/main.py'],
-                type: 'SECURITY' as const,
-                priority: 'HIGH' as const,
-            },
-            {
-                title: 'Enforce Cosine Similarity & Vector Dimension Alignment',
-                desc: 'Validate PostgreSQL vector(384) embedding dimensions in Supabase queries prior to similarity execution.',
-                files: ['backend/app/services/vector.py', 'db/schema.sql'],
-                type: 'REFACTOR' as const,
-                priority: 'MEDIUM' as const,
-            },
-            {
-                title: 'Optimize Temporal Workflow Retries and Exception Handling',
-                desc: 'Configure exponential backoff execution policies for long-running OrderSupervisorWorkflows during external LLM API outages.',
-                files: ['backend/app/temporal/workflows.py', 'backend/app/temporal/activities.py'],
-                type: 'PERFORMANCE' as const,
-                priority: 'HIGH' as const,
-            },
-        ];
+    const rawImprovements = analysis.improvements || [];
 
     const filteredImprovements = rawImprovements.filter((imp) => {
         if (filterCategory === 'ALL') return true;
-        const category = imp.type || (rawImprovements.indexOf(imp) % 2 === 0 ? 'SECURITY' : 'REFACTOR');
+        const category = imp.type || 'ARCHITECTURE';
         return category === filterCategory;
     });
 
-    const categories = [
-        { name: 'Code defect', accepted: 30, posted: 70 },
-        { name: 'Stability and availability', accepted: 75, posted: 95 },
-        { name: 'Security', accepted: 45, posted: 80 },
-        { name: 'Performance', accepted: 85, posted: 100 },
-        { name: 'Maintainability', accepted: 35, posted: 55 },
-        { name: 'Code quality', accepted: 70, posted: 90 },
-        { name: 'Functional correctness', accepted: 90, posted: 98 },
-        { name: 'Data integrity and integration', accepted: 65, posted: 72 },
-    ];
+    const categoryCounts = Object.entries(rawImprovements.reduce<Record<string, number>>((counts, improvement) => {
+        const category = improvement.type || 'ARCHITECTURE';
+        counts[category] = (counts[category] || 0) + 1;
+        return counts;
+    }, {})).map(([name, count]) => ({ name, count }));
 
     return (
         <div className="space-y-6 font-sans text-zinc-100 pb-8 max-w-7xl mx-auto">
@@ -227,7 +191,7 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
                             </button>
                         </div>
                         <p className="text-zinc-300 text-xs leading-relaxed">
-                            {analysis.summary || 'Production-ready architecture monitored with vector intelligence and agent execution.'}
+                            {analysis.summary || 'No repository summary is available yet.'}
                         </p>
                     </div>
                 </div>
@@ -235,45 +199,34 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
 
             {/* Top KPI Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono">
-                <MetricCard title="MERGED PULL REQUESTS" value="145" unit="PULL REQUESTS" />
-                <MetricCard title="ACTIVE USERS" value="86" unit="USERS" />
-                <MetricCard title="MEDIAN TIME TO LAST COMMIT" value="1.7" unit="HOURS" />
-                <MetricCard title="REVIEW TIME SAVED" value="1.2" unit="DAYS" />
+                <MetricCard title="LANGUAGES DETECTED" value={String(langDetails.length)} unit="LANGUAGES" />
+                <MetricCard title="LANGUAGE DATA" value={totalLines.toLocaleString()} unit="BYTES" />
+                <MetricCard title="AI IMPROVEMENTS" value={String(rawImprovements.length)} unit="FINDINGS" />
+                <MetricCard title="INDEX STATUS" value="COMPLETE" unit="REPOSITORY" />
             </div>
 
             {/* Visual Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* 1. Radar Chart: Review Comments by Severity */}
+                {/* 1. Findings summary */}
                 <div className="rounded-xl bg-[#0f0f13] border border-white/[0.08] p-5 space-y-4 flex flex-col justify-between">
                     <div className="flex items-center justify-between">
                         <span className="text-[11px] font-mono font-semibold text-zinc-400 uppercase tracking-wider">
-                            REVIEW COMMENTS BY SEVERITY
+                            FINDINGS BY CATEGORY
                         </span>
                         <InfoIcon className="w-3.5 h-3.5 text-zinc-600" />
                     </div>
 
-                    <div className="flex items-center justify-center py-2 relative">
-                        <svg className="w-56 h-48" viewBox="0 0 200 180">
-                            <polygon points="100,20 20,150 180,150" fill="none" stroke="#26262f" strokeWidth="1" strokeDasharray="3 3" />
-                            <polygon points="100,50 45,135 155,135" fill="none" stroke="#1f1f27" strokeWidth="1" />
-                            <polygon points="100,80 70,120 130,120" fill="none" stroke="#1c1c23" strokeWidth="1" />
-                            <polygon points="100,45 40,140 150,130" fill="#6366f1" fillOpacity="0.25" stroke="#6366f1" strokeWidth="1.5" />
-                            <polygon points="100,65 60,135 140,125" fill="#10b981" fillOpacity="0.35" stroke="#10b981" strokeWidth="1.5" />
-                            <text x="100" y="12" fill="#a1a1aa" fontSize="10" fontFamily="monospace" textAnchor="middle">Critical</text>
-                            <text x="15" y="165" fill="#a1a1aa" fontSize="10" fontFamily="monospace" textAnchor="middle">Major</text>
-                            <text x="185" y="165" fill="#a1a1aa" fontSize="10" fontFamily="monospace" textAnchor="middle">Minor</text>
-                        </svg>
+                    <div className="space-y-2 py-2">
+                        {categoryCounts.length === 0 ? <p className="text-xs text-zinc-600 text-center py-10">No findings available.</p> : categoryCounts.map((category) => (
+                            <div key={category.name} className="flex items-center justify-between text-xs font-mono">
+                                <span className="text-zinc-400">{category.name}</span>
+                                <span className="text-zinc-200">{category.count}</span>
+                            </div>
+                        ))}
                     </div>
 
                     <div className="flex items-center justify-center gap-6 font-mono text-[11px]">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-                            <span className="text-zinc-300">Accepted</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500" />
-                            <span className="text-zinc-300">Posted</span>
-                        </div>
+                        <span className="text-zinc-500">Source: repository AI analysis</span>
                     </div>
                 </div>
 
@@ -287,27 +240,17 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
                     </div>
 
                     <div className="space-y-2.5 font-mono text-xs">
-                        {categories.slice(0, 5).map((cat) => (
+                        {categoryCounts.length === 0 ? <p className="text-xs text-zinc-600 py-6 text-center">No improvement findings available.</p> : categoryCounts.slice(0, 5).map((cat) => (
                             <div key={cat.name} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                <span className="text-zinc-400 text-[11px] w-52 shrink-0 truncate">{cat.name}</span>
+                                <span className="text-zinc-400 text-[11px] w-52 shrink-0 truncate">{cat.name} ({cat.count})</span>
                                 <div className="flex-1 h-4 rounded bg-[#16161b] overflow-hidden flex p-0.5 border border-white/5">
-                                    <div className="h-full bg-emerald-500 rounded-sm" style={{ width: `${cat.accepted}%` }} />
-                                    <div className="h-full bg-indigo-500/80 rounded-sm ml-1" style={{ width: `${cat.posted - cat.accepted}%` }} />
+                                    <div className="h-full bg-indigo-500 rounded-sm" style={{ width: `${(cat.count / Math.max(...categoryCounts.map(item => item.count))) * 100}%` }} />
                                 </div>
                             </div>
                         ))}
                     </div>
 
-                    <div className="flex items-center gap-6 font-mono text-[11px] pt-1">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-                            <span className="text-zinc-300">Accepted</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500" />
-                            <span className="text-zinc-300">Posted</span>
-                        </div>
-                    </div>
+                    <div className="text-[11px] font-mono text-zinc-500 pt-1">Counts are generated from this repository only.</div>
                 </div>
             </div>
 
@@ -380,38 +323,8 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
                             <p className="leading-relaxed text-zinc-300 text-xs">{formatArchText(analysis.architecture)}</p>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                            <div className="p-3 rounded-lg bg-[#18181c] border border-white/[0.06] space-y-1">
-                                <div className="flex items-center gap-1.5 text-zinc-200 text-xs font-semibold">
-                                    <LayoutGrid className="w-3.5 h-3.5 text-zinc-400" />
-                                    <span>Frontend App</span>
-                                </div>
-                                <p className="text-[11px] text-zinc-400 leading-normal">Next.js App Router with responsive Tailwind components</p>
-                            </div>
-
-                            <div className="p-3 rounded-lg bg-[#18181c] border border-white/[0.06] space-y-1">
-                                <div className="flex items-center gap-1.5 text-zinc-200 text-xs font-semibold">
-                                    <Code2 className="w-3.5 h-3.5 text-zinc-400" />
-                                    <span>Backend Service</span>
-                                </div>
-                                <p className="text-[11px] text-zinc-400 leading-normal">FastAPI REST controllers & Pydantic typed settings</p>
-                            </div>
-
-                            <div className="p-3 rounded-lg bg-[#18181c] border border-white/[0.06] space-y-1">
-                                <div className="flex items-center gap-1.5 text-zinc-200 text-xs font-semibold">
-                                    <Workflow className="w-3.5 h-3.5 text-zinc-400" />
-                                    <span>Orchestration</span>
-                                </div>
-                                <p className="text-[11px] text-zinc-400 leading-normal">Temporal Python SDK workflows for stateful execution</p>
-                            </div>
-
-                            <div className="p-3 rounded-lg bg-[#18181c] border border-white/[0.06] space-y-1">
-                                <div className="flex items-center gap-1.5 text-zinc-200 text-xs font-semibold">
-                                    <Database className="w-3.5 h-3.5 text-zinc-400" />
-                                    <span>Data & Vectors</span>
-                                </div>
-                                <p className="text-[11px] text-zinc-400 leading-normal">Supabase PostgreSQL for vector search & persistent logs</p>
-                            </div>
+                        <div className="p-3 rounded-lg bg-[#18181c] border border-white/[0.06] text-[11px] text-zinc-500">
+                            The architecture description above is generated from this repository. No assumptions about frameworks or services are shown here.
                         </div>
                     </div>
                 </div>

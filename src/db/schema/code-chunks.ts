@@ -25,7 +25,8 @@ export const codeChunk = pgTable(
     startLine: integer("start_line").notNull(),
     endLine: integer("end_line").notNull(),
     language: text("language").notNull(),
-    embedding: vector("embedding", { dimensions: 384 }),
+    // New embedding space; the legacy 384-dimension column is retained during migration.
+    embedding: vector("embedding_v2", { dimensions: 1024 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

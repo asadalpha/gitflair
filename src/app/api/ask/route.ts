@@ -31,17 +31,12 @@ export async function POST(req: NextRequest) {
     const chatCountResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(qaHistory)
-      .where(
-        and(
-          eq(qaHistory.repositoryId, repositoryId),
-          eq(qaHistory.userId, user.id),
-        ),
-      );
+      .where(eq(qaHistory.userId, user.id));
 
     const chatCount = Number(chatCountResult[0]?.count ?? 0);
-    if (chatCount >= 3) {
+    if (chatCount >= 5) {
       return Response.json(
-        { error: "Limit reached: You can only ask up to 3 questions per repository." },
+        { error: "Limit reached: You can ask up to 5 questions total." },
         { status: 403 },
       );
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 
 interface ArchNode {
@@ -12,37 +12,37 @@ interface ArchNode {
     desc: string;
 }
 
-const DEFAULT_NODES: ArchNode[] = [
-    { id: 'node-1', label: 'CLIENT FRONTEND', type: 'frontend', tech: 'Next.js 16 + React 19', status: 'active', desc: 'Minimal dark boxy UI with terminal state' },
-    { id: 'node-2', label: 'API GATEWAY', type: 'gateway', tech: 'App Router API Routes', status: 'active', desc: 'Rate limiting, user session validation & routing' },
-    { id: 'node-3', label: 'NEON POSTGRES', type: 'database', tech: 'Neon DB + Drizzle + pgvector', status: 'active', desc: 'Relational data + 384-dim vector embeddings' },
-    { id: 'node-4', label: 'LOCAL EMBEDDER', type: 'ai', tech: 'Transformers.js (all-MiniLM-L6-v2)', status: 'active', desc: 'Offline 384-dimensional vector extraction' },
-    { id: 'node-5', label: 'LLM REASONING', type: 'ai', tech: 'Gemini 2.5 Flash / OpenRouter', status: 'active', desc: 'RAG context synthesis & PR review generation' },
-];
+interface RepoAnalysis {
+    summary?: string;
+    architecture?: string;
+    improvements?: { title: string; desc: string; files: string[] }[];
+}
 
-export default function ArchFlow({ repoName }: { repoName: string }) {
-    const [nodes, setNodes] = useState<ArchNode[]>(DEFAULT_NODES);
-    const [selectedNode, setSelectedNode] = useState<ArchNode | null>(DEFAULT_NODES[0]);
+export default function ArchFlow({ repoName, repoUrl, languages, analysis }: { repoName: string; repoUrl?: string; languages?: Record<string, number> | null; analysis?: RepoAnalysis }) {
+    const nodes = useMemo<ArchNode[]>(() => {
+        const languageEntries = Object.entries(languages || {}).sort(([, a], [, b]) => b - a);
+        const languageSummary = languageEntries.length
+            ? languageEntries.map(([name, bytes]) => `${name} (${bytes.toLocaleString()} bytes)`).join(', ')
+            : 'No language data returned by GitHub';
+        const findingCount = analysis?.improvements?.length || 0;
+        return [
+            { id: 'repo', label: repoName.toUpperCase(), type: 'service', tech: repoUrl || 'GitHub repository', status: 'active', desc: 'Repository currently selected in GitFlair.' },
+            { id: 'languages', label: 'DETECTED LANGUAGES', type: 'service', tech: `${languageEntries.length} language${languageEntries.length === 1 ? '' : 's'}`, status: 'active', desc: languageSummary },
+            { id: 'architecture', label: 'ARCHITECTURE EVIDENCE', type: 'ai', tech: 'Analysis generated from indexed files', status: analysis?.architecture ? 'active' : 'standby', desc: analysis?.architecture || 'Architecture analysis is not available yet.' },
+            { id: 'findings', label: 'AI FINDINGS', type: 'ai', tech: `${findingCount} improvement${findingCount === 1 ? '' : 's'}`, status: findingCount ? 'active' : 'standby', desc: findingCount ? analysis!.improvements!.map(item => item.title).join(' · ') : 'No improvement findings are available.' },
+        ];
+    }, [analysis, languages, repoName, repoUrl]);
+    const [selectedNode, setSelectedNode] = useState<ArchNode | null>(null);
     const [prompt, setPrompt] = useState('');
-    const [isGenerating, setIsGenerating] = useState(false);
 
-    const handleGenerate = (e: React.FormEvent) => {
+    const selected = selectedNode || nodes[0];
+
+    const handleFocus = (e: React.FormEvent) => {
         e.preventDefault();
         if (!prompt.trim()) return;
-
-        setIsGenerating(true);
-        setTimeout(() => {
-            const customNodes: ArchNode[] = [
-                { id: 'c-1', label: 'INGRESS LOAD BALANCER', type: 'gateway', tech: 'NGINX / Cloudflare', status: 'active', desc: 'TLS termination and request routing' },
-                { id: 'c-2', label: 'MICROSERVICE CORE', type: 'service', tech: 'Node.js / Go Workers', status: 'active', desc: 'Event-driven message consumer' },
-                { id: 'c-3', label: 'CACHE LAYER', type: 'database', tech: 'Redis / Upstash', status: 'active', desc: 'Sub-millisecond query result caching' },
-                { id: 'c-4', label: 'NEON POSTGRES VECTOR', type: 'database', tech: 'Neon + pgvector(384)', status: 'active', desc: 'Persistent code embeddings' },
-                { id: 'c-5', label: 'AI REASONING PIPELINE', type: 'ai', tech: 'Gemini RAG Pipeline', status: 'active', desc: 'Context-grounded answer engine' },
-            ];
-            setNodes(customNodes);
-            setSelectedNode(customNodes[0]);
-            setIsGenerating(false);
-        }, 1200);
+        const query = prompt.toLowerCase();
+        const match = nodes.find(node => `${node.label} ${node.tech} ${node.desc}`.toLowerCase().includes(query));
+        setSelectedNode(match || nodes[nodes.length - 1]);
     };
 
     return (
@@ -57,24 +57,24 @@ export default function ArchFlow({ repoName }: { repoName: string }) {
                         </h3>
                     </div>
                     <p className="text-[11px] font-mono-tech text-zinc-500 mt-1">
-                        Interactive node graph for {repoName}
+                         Evidence-based view for {repoName}; values come from this repository only.
                     </p>
                 </div>
 
-                <form onSubmit={handleGenerate} className="flex items-center gap-2 w-full md:w-auto">
+                <form onSubmit={handleFocus} className="flex items-center gap-2 w-full md:w-auto">
                     <input
                         type="text"
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="e.g. Add Redis cache and microservice worker..."
+                        placeholder="Find language, architecture, or finding..."
                         className="bg-zinc-950 border border-zinc-800 px-3 py-1.5 text-xs font-mono-tech text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-zinc-600 w-full md:w-64"
                     />
-                    <button
-                        type="submit"
-                        disabled={isGenerating || !prompt.trim()}
-                        className="boxy-btn py-1.5 px-3 text-[11px] shrink-0 disabled:opacity-40"
-                    >
-                        {isGenerating ? '[ GENERATING... ]' : '[ GENERATE FLOW ]'}
+                        <button
+                            type="submit"
+                            disabled={!prompt.trim()}
+                            className="boxy-btn py-1.5 px-3 text-[11px] shrink-0 disabled:opacity-40"
+                        >
+                            [ FIND NODE ]
                     </button>
                 </form>
             </div>
@@ -104,7 +104,7 @@ export default function ArchFlow({ repoName }: { repoName: string }) {
                                     <span className="mono-badge text-[9px] uppercase font-bold text-zinc-400">
                                         NODE 0{index + 1}
                                     </span>
-                                    <span className="w-1.5 h-1.5 rounded-none bg-emerald-400 animate-pulse" />
+                            <span className={`w-1.5 h-1.5 rounded-none ${node.status === 'active' ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                                 </div>
                                 <h4 className="text-xs font-mono-tech font-bold text-zinc-100 truncate">
                                     {node.label}
@@ -117,26 +117,41 @@ export default function ArchFlow({ repoName }: { repoName: string }) {
                     })}
                 </div>
 
-                {/* SVG Flow Lines Connector */}
+                {/* Actual request/data path */}
                 <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-25">
                     <line x1="10%" y1="50%" x2="90%" y2="50%" stroke="#3b82f6" strokeWidth="2" strokeDasharray="6 6" />
                 </svg>
 
+                {analysis && (
+                    <div className="relative z-10 mt-6 grid md:grid-cols-2 gap-3">
+                        <div className="p-3 border border-zinc-800 bg-zinc-900/70">
+                            <div className="text-[10px] text-blue-400 font-bold mb-1">[ REPOSITORY ANALYSIS ]</div>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">{analysis.summary || analysis.architecture || 'Repository analysis available.'}</p>
+                        </div>
+                        {analysis.improvements?.length ? (
+                            <div className="p-3 border border-zinc-800 bg-zinc-900/70">
+                                <div className="text-[10px] text-amber-400 font-bold mb-1">[ DETECTED IMPROVEMENTS ]</div>
+                                <p className="text-[11px] text-zinc-400 leading-relaxed">{analysis.improvements.slice(0, 2).map(item => item.title).join(' · ')}</p>
+                            </div>
+                        ) : null}
+                    </div>
+                )}
+
                 {/* Selected Node Details Drawer */}
-                {selectedNode && (
+                {selected && (
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         className="mt-8 p-4 boxy-card border-zinc-800 bg-zinc-900/90 font-mono-tech text-xs"
                     >
                         <div className="flex items-center justify-between mb-2 border-b border-zinc-800 pb-2">
-                            <span className="text-blue-400 font-bold">[ SPECIFICATION ] {selectedNode.label}</span>
-                            <span className="text-zinc-600 text-[10px]">ID: {selectedNode.id}</span>
+                            <span className="text-blue-400 font-bold">[ EVIDENCE ] {selected.label}</span>
+                            <span className="text-zinc-600 text-[10px]">ID: {selected.id}</span>
                         </div>
-                        <p className="text-zinc-300 leading-relaxed font-light">{selectedNode.desc}</p>
+                        <p className="text-zinc-300 leading-relaxed font-light">{selected.desc}</p>
                         <div className="mt-3 flex items-center gap-4 text-[10px] text-zinc-500">
-                            <span>TECH: <strong className="text-zinc-300">{selectedNode.tech}</strong></span>
-                            <span>STATUS: <strong className="text-emerald-400">{selectedNode.status.toUpperCase()}</strong></span>
+                            <span>DATA: <strong className="text-zinc-300">{selected.tech}</strong></span>
+                            <span>STATUS: <strong className={selected.status === 'active' ? 'text-emerald-400' : 'text-zinc-500'}>{selected.status.toUpperCase()}</strong></span>
                         </div>
                     </motion.div>
                 )}

@@ -4,7 +4,7 @@
 
 ## Features
 
-- **Semantic Indexing**: Deep code analysis using Google Gemini embeddings and Supabase pgvector storage.
+- **Semantic Indexing**: Local MiniLM embeddings and pgvector-compatible storage.
 - **Code-Grounded Q&A**: Get precise answers backed by actual code snippets from the repo.
 - **Real-time Health Monitoring**: Integrated status dashboard for Backend, Database, and LLM connectivity.
 - **Fast Ingestion**: Parallel processing and chunking for efficient repository indexing.
@@ -21,16 +21,16 @@ To ensure fair usage and manage API costs, the following limits are in place:
 
 1. **Ingestion**: The user provides a GitHub URL. The backend uses the GitHub API to fetch recursive file trees, filtering for supported source code files.
 2. **Chunking**: Code files are split into logical chunks using LangChain's `RecursiveCharacterTextSplitter`, preserving context and language-specific syntax.
-3. **Embedding**: Each chunk is converted into a 3072-dimensional vector using the `gemini-embedding-001` model.
+3. **Embedding**: Each chunk is converted into a 1024-dimensional vector using OpenRouter's free `liquid/lfm-2.5-embedding-350m:free` model (with a deterministic fallback if unavailable).
 4. **Storage**: Vectors and metadata (file paths, line ranges) are stored in Supabase using the `pgvector` extension.
 5. **Retrieval**: When a user asks a question, the query is embedded and a cosine similarity search is performed to find the most relevant code snippets.
-6. **Generation**: The retrieved snippets and chat history are passed to `gemini-2.5-flash` to generate a grounded, accurate response.
+6. **Generation**: The retrieved snippets and chat history are sent to OpenRouter's `openrouter/free` model first, with automatic fallback to OpenCode Go's OpenAI-compatible `/v1/chat/completions` endpoint.
 
 ## Tech Stack
 
 - **Frontend**: Next.js (App Router), TailwindCSS, Framer Motion, Lucide React.
 - **Backend**: Next.js API Routes, Supabase (PostgreSQL + pgvector).
-- **AI/LLM**: Google Gemini (Gemini 2.5 Flash/Flash), LangChain for text splitting.
+- **AI/LLM**: OpenRouter `openrouter/free` with OpenCode Go fallback; OpenRouter Liquid embeddings; LangChain for text splitting.
 
 ## Getting Started
 
@@ -47,13 +47,20 @@ To ensure fair usage and manage API costs, the following limits are in place:
     - `NEXT_PUBLIC_SUPABASE_URL`
     - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
     - `SUPABASE_SERVICE_ROLE_KEY`
-    - `GOOGLE_GENAI_API_KEY`
-    - `GITHUB_TOKEN`
-4.  **Run the development server**:
+     - `OPENCODE_GO_API_KEY`
+     - `OPENCODE_GO_MODEL` (for example, `glm-5.3-flash`)
+     - `OPENROUTER_API_KEY`
+     - `GITHUB_TOKEN`
+4.  **Apply database migrations**:
+    ```bash
+    npm run db:migrate
+    ```
+    Run this command after every schema migration and during deployment. Do not use `drizzle-kit push` for shared environments; committed SQL migrations are the source of truth.
+5.  **Run the development server**:
     ```bash
     npm run dev
     ```
-5.  **Access the app**:
+6.  **Access the app**:
     Open [http://localhost:3000](http://localhost:3000)
 
 ## Project Structure

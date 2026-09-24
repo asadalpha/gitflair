@@ -199,7 +199,7 @@ export default function ChatInterface({ repoId, userId, onFileClick }: ChatInter
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-white">Codebase Intelligence Assistant</span>
                             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                GEMINI 2.0 FLASH
+                                OPENCODE GO
                             </span>
                         </div>
                         <span className="text-[11px] text-zinc-500 block">Context-aware Q&A indexed via 384-dim vectors</span>

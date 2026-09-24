@@ -120,16 +120,15 @@ export default function PRReviewPanel({ repoId, userId, onFileClick }: PRReviewP
         }
     };
 
-    const categories = [
-        { name: 'Code defect', accepted: 30, posted: 70 },
-        { name: 'Stability and availability', accepted: 75, posted: 95 },
-        { name: 'Security', accepted: 45, posted: 80 },
-        { name: 'Performance', accepted: 85, posted: 100 },
-        { name: 'Maintainability', accepted: 35, posted: 55 },
-        { name: 'Code quality', accepted: 70, posted: 90 },
-        { name: 'Functional correctness', accepted: 90, posted: 98 },
-        { name: 'Data integrity and integration', accepted: 65, posted: 72 },
-    ];
+    const completedReviews = pastReviews.filter((review) => review.status === 'completed');
+    const reviewComments = completedReviews.flatMap((review) => review.fileReviews || []).flatMap((file) => file.comments || []);
+    const averageScore = completedReviews.length > 0
+        ? completedReviews.reduce((sum, review) => sum + (review.score || 0), 0) / completedReviews.length
+        : 0;
+    const severityCounts = ['error', 'warning', 'info'].map((type) => ({
+        name: type.toUpperCase(),
+        count: reviewComments.filter((comment) => comment.type === type).length,
+    }));
 
     return (
         <div className="space-y-6 font-sans text-xs text-zinc-300 max-w-7xl mx-auto">
@@ -203,15 +202,15 @@ export default function PRReviewPanel({ repoId, userId, onFileClick }: PRReviewP
 
             {/* Top KPI Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <MetricCard title="MERGED PULL REQUESTS" value="145" unit="PULL REQUESTS" />
-                <MetricCard title="ACTIVE USERS" value="86" unit="USERS" />
-                <MetricCard title="MEDIAN TIME TO LAST COMMIT" value="1.7" unit="HOURS" />
-                <MetricCard title="REVIEW TIME SAVED" value="1.2" unit="DAYS" />
+                <MetricCard title="REVIEWS COMPLETED" value={String(completedReviews.length)} unit="REVIEWS" />
+                <MetricCard title="REVIEW COMMENTS" value={String(reviewComments.length)} unit="COMMENTS" />
+                <MetricCard title="AVERAGE SCORE" value={completedReviews.length ? averageScore.toFixed(1) : '—'} unit="OUT OF 100" />
+                <MetricCard title="REVIEWS IN HISTORY" value={String(pastReviews.length)} unit="REVIEWS" />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <MetricCardDouble title="GITFLAIR REVIEW COMMENTS" val1="645" label1="POSTED" val2="45.1%" label2="ACCEPTED (%)" />
-                <MetricCardDouble title="AVG REVIEW COMMENTS POSTED PER PR" val1="4.5" label1="BY GITFLAIR" val2="6.9" label2="BY HUMAN" />
+                <MetricCardDouble title="REVIEW COMMENTS" val1={String(reviewComments.length)} label1="TOTAL" val2={String(completedReviews.length ? (reviewComments.length / completedReviews.length).toFixed(1) : '—')} label2="PER REVIEW" />
+                <MetricCardDouble title="COMMENT SEVERITY" val1={String(severityCounts.find((item) => item.name === 'ERROR')?.count || 0)} label1="ERRORS" val2={String(severityCounts.find((item) => item.name === 'WARNING')?.count || 0)} label2="WARNINGS" />
                 <div className="lg:col-span-2 rounded-xl bg-[#0f0f13] border border-white/[0.08] p-4 flex items-center justify-between font-mono">
                     <div className="space-y-1">
                         <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">RUN NEW AI PR REVIEW</span>
@@ -236,9 +235,8 @@ export default function PRReviewPanel({ repoId, userId, onFileClick }: PRReviewP
                 </div>
             </div>
 
-            {/* Visual Charts Grid */}
+            {/* Real review metrics */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* 1. Radar Chart: Review Comments by Severity */}
                 <div className="rounded-xl bg-[#0f0f13] border border-white/[0.08] p-5 space-y-4 flex flex-col justify-between">
                     <div className="flex items-center justify-between">
                         <span className="text-[11px] font-mono font-semibold text-zinc-400 uppercase tracking-wider">
@@ -247,118 +245,45 @@ export default function PRReviewPanel({ repoId, userId, onFileClick }: PRReviewP
                         <InfoIcon className="w-3.5 h-3.5 text-zinc-600" />
                     </div>
 
-                    {/* SVG Triangle Radar Chart */}
-                    <div className="flex items-center justify-center py-2 relative">
-                        <svg className="w-56 h-48" viewBox="0 0 200 180">
-                            {/* Outer Triangle Grid */}
-                            <polygon points="100,20 20,150 180,150" fill="none" stroke="#26262f" strokeWidth="1" strokeDasharray="3 3" />
-                            <polygon points="100,50 45,135 155,135" fill="none" stroke="#1f1f27" strokeWidth="1" />
-                            <polygon points="100,80 70,120 130,120" fill="none" stroke="#1c1c23" strokeWidth="1" />
-
-                            {/* Polygon 1: Posted (Indigo/Purple) */}
-                            <polygon points="100,45 40,140 150,130" fill="#6366f1" fillOpacity="0.25" stroke="#6366f1" strokeWidth="1.5" />
-
-                            {/* Polygon 2: Accepted (Emerald Green) */}
-                            <polygon points="100,65 60,135 140,125" fill="#10b981" fillOpacity="0.35" stroke="#10b981" strokeWidth="1.5" />
-
-                            {/* Labels */}
-                            <text x="100" y="12" fill="#a1a1aa" fontSize="10" fontFamily="monospace" textAnchor="middle">Critical</text>
-                            <text x="15" y="165" fill="#a1a1aa" fontSize="10" fontFamily="monospace" textAnchor="middle">Major</text>
-                            <text x="185" y="165" fill="#a1a1aa" fontSize="10" fontFamily="monospace" textAnchor="middle">Minor</text>
-                        </svg>
-                    </div>
-
-                    <div className="flex items-center justify-center gap-6 font-mono text-[11px]">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-                            <span className="text-zinc-300">Accepted</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500" />
-                            <span className="text-zinc-300">Posted</span>
-                        </div>
+                    <div className="space-y-3 py-4 font-mono text-xs">
+                        {severityCounts.map((item) => <div key={item.name} className="flex justify-between text-zinc-400"><span>{item.name}</span><strong className="text-zinc-200">{item.count}</strong></div>)}
                     </div>
                 </div>
 
-                {/* 2. Donut Ring Chart: Suggestions by Severity */}
+                {/* Real score summary */}
                 <div className="rounded-xl bg-[#0f0f13] border border-white/[0.08] p-5 space-y-4 flex flex-col justify-between">
                     <div className="flex items-center justify-between">
                         <span className="text-[11px] font-mono font-semibold text-zinc-400 uppercase tracking-wider">
-                            SUGGESTIONS BY SEVERITY (BAR)
+                            SCORE SUMMARY
                         </span>
                         <InfoIcon className="w-3.5 h-3.5 text-zinc-600" />
                     </div>
 
-                    {/* SVG Donut Ring Chart */}
-                    <div className="flex items-center justify-center py-2">
-                        <svg className="w-48 h-48" viewBox="0 0 100 100">
-                            {/* Outer Ring Segments */}
-                            <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" strokeWidth="14" strokeDasharray="60 180" strokeDashoffset="0" />
-                            <circle cx="50" cy="50" r="38" fill="none" stroke="#312e81" strokeWidth="14" strokeDasharray="70 180" strokeDashoffset="-60" />
-                            <circle cx="50" cy="50" r="38" fill="none" stroke="#0284c7" strokeWidth="14" strokeDasharray="110 180" strokeDashoffset="-130" />
-                        </svg>
+                    <div className="flex items-center justify-center py-8">
+                        <span className="text-4xl font-semibold text-white">{completedReviews.length ? averageScore.toFixed(1) : '—'}</span>
                     </div>
 
                     <div className="flex items-center justify-center gap-4 font-mono text-[11px]">
-                        <div className="flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-                            <span className="text-zinc-300">Critical</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-indigo-900" />
-                            <span className="text-zinc-300">Major</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-sky-600" />
-                            <span className="text-zinc-300">Minor</span>
-                        </div>
+                        <span className="text-zinc-500">Average score from completed reviews</span>
                     </div>
                 </div>
 
-                {/* 3. Category Distribution Spider Radar Chart */}
+                {/* Real review coverage */}
                 <div className="rounded-xl bg-[#0f0f13] border border-white/[0.08] p-5 space-y-4 flex flex-col justify-between">
                     <div className="flex items-center justify-between">
                         <span className="text-[11px] font-mono font-semibold text-zinc-400 uppercase tracking-wider">
-                            CATEGORY DISTRIBUTION
+                            REVIEW COVERAGE
                         </span>
                         <InfoIcon className="w-3.5 h-3.5 text-zinc-600" />
                     </div>
 
-                    {/* SVG 8-axis Octagon Radar Chart */}
-                    <div className="flex items-center justify-center py-1 relative">
-                        <svg className="w-64 h-52" viewBox="0 0 220 180">
-                            {/* Octagon Grid */}
-                            <polygon points="110,20 160,40 180,90 160,140 110,160 60,140 40,90 60,40" fill="none" stroke="#26262f" strokeWidth="1" strokeDasharray="2 2" />
-                            <polygon points="110,40 145,55 160,90 145,125 110,140 75,125 60,90 75,55" fill="none" stroke="#1c1c23" strokeWidth="1" />
-
-                            {/* Outer Layer: Posted */}
-                            <polygon points="110,35 150,50 165,90 140,120 110,135 70,120 55,90 70,50" fill="#6366f1" fillOpacity="0.25" stroke="#6366f1" strokeWidth="1.5" />
-
-                            {/* Inner Layer: Accepted */}
-                            <polygon points="110,50 135,60 150,90 130,110 110,125 80,110 70,90 80,60" fill="#10b981" fillOpacity="0.35" stroke="#10b981" strokeWidth="1.5" />
-
-                            {/* Labels around Octagon */}
-                            <text x="110" y="12" fill="#888893" fontSize="8" fontFamily="monospace" textAnchor="middle">Code defect</text>
-                            <text x="182" y="36" fill="#888893" fontSize="8" fontFamily="monospace" textAnchor="start">Stability</text>
-                            <text x="190" y="94" fill="#888893" fontSize="8" fontFamily="monospace" textAnchor="start">Security</text>
-                            <text x="180" y="152" fill="#888893" fontSize="8" fontFamily="monospace" textAnchor="start">Performance</text>
-                            <text x="110" y="174" fill="#888893" fontSize="8" fontFamily="monospace" textAnchor="middle">Maintainability</text>
-                            <text x="35" y="152" fill="#888893" fontSize="8" fontFamily="monospace" textAnchor="end">Code quality</text>
-                            <text x="25" y="94" fill="#888893" fontSize="8" fontFamily="monospace" textAnchor="end">Correctness</text>
-                            <text x="35" y="36" fill="#888893" fontSize="8" fontFamily="monospace" textAnchor="end">Integrity</text>
-                        </svg>
+                    <div className="space-y-3 py-8 text-center font-mono text-xs text-zinc-500">
+                        <div>{completedReviews.length} completed reviews</div>
+                        <div>{reviewComments.length} extracted comments</div>
+                        <div>{pastReviews.length} total records</div>
                     </div>
 
-                    <div className="flex items-center justify-center gap-6 font-mono text-[11px]">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-                            <span className="text-zinc-300">Accepted</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500" />
-                            <span className="text-zinc-300">Posted</span>
-                        </div>
-                    </div>
+                    <div className="text-center text-zinc-500 font-mono text-[11px]">Source: this repository's review history.</div>
                 </div>
             </div>
 
@@ -366,41 +291,27 @@ export default function PRReviewPanel({ repoId, userId, onFileClick }: PRReviewP
             <div className="rounded-xl bg-[#0f0f13] border border-white/[0.08] p-6 space-y-4">
                 <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
                     <span className="text-[11px] font-mono font-semibold text-zinc-400 uppercase tracking-wider">
-                        SUGGESTIONS BREAKDOWN
+                        COMMENTS BY SEVERITY
                     </span>
                     <InfoIcon className="w-3.5 h-3.5 text-zinc-600" />
                 </div>
 
                 <div className="space-y-3 font-mono text-xs">
-                    {categories.map((cat) => (
+                    {severityCounts.map((cat) => (
                         <div key={cat.name} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <span className="text-zinc-400 text-[11px] w-56 shrink-0 truncate">{cat.name}</span>
+                            <span className="text-zinc-400 text-[11px] w-56 shrink-0 truncate">{cat.name} ({cat.count})</span>
                             <div className="flex-1 h-5 rounded-md bg-[#16161b] overflow-hidden flex p-0.5 border border-white/5">
                                 <div
-                                    className="h-full bg-emerald-500 rounded-sm transition-all"
-                                    style={{ width: `${cat.accepted}%` }}
-                                    title={`Accepted: ${cat.accepted}%`}
-                                />
-                                <div
-                                    className="h-full bg-indigo-500/80 rounded-sm transition-all ml-1"
-                                    style={{ width: `${cat.posted - cat.accepted}%` }}
-                                    title={`Posted: ${cat.posted}%`}
+                                    className="h-full bg-indigo-500 rounded-sm transition-all"
+                                    style={{ width: `${reviewComments.length ? (cat.count / reviewComments.length) * 100 : 0}%` }}
+                                    title={`${cat.count} comments`}
                                 />
                             </div>
                         </div>
                     ))}
                 </div>
 
-                <div className="flex items-center gap-6 font-mono text-[11px] pt-2 border-t border-white/[0.06]">
-                    <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-                        <span className="text-zinc-300">Accepted</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500" />
-                        <span className="text-zinc-300">Posted</span>
-                    </div>
-                </div>
+                    <div className="text-zinc-500 font-mono text-[11px] pt-2 border-t border-white/[0.06]">Source: completed reviews in this repository.</div>
             </div>
 
             {/* Active Review Details & Past History Section */}

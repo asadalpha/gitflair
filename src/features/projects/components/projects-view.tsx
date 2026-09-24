@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Box, Plus, BookOpen, Layers, FolderGit2, Sparkles } from 'lucide-react';
 import { showToast } from '@/components/ui/toast';
@@ -9,34 +9,44 @@ import RepoInput from '@/features/repos/components/repo-input';
 interface ProjectsViewProps {
     onIngest?: (url: string) => Promise<void>;
     isIngesting?: boolean;
+    repositories?: { id: string; name?: string; fullName?: string; url: string; createdAt?: string }[];
+    userId?: string;
 }
 
-export default function ProjectsView({ onIngest, isIngesting }: ProjectsViewProps) {
+export default function ProjectsView({ onIngest, isIngesting, repositories = [], userId }: ProjectsViewProps) {
     const [projects, setProjects] = useState<{ id: string; name: string; desc: string; date: string }[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [activeModalTab, setActiveModalTab] = useState<'repo' | 'project'>('repo');
     const [name, setName] = useState('');
     const [desc, setDesc] = useState('');
 
+    useEffect(() => {
+        if (!userId) return;
+        fetch(`/api/projects?userId=${encodeURIComponent(userId)}`)
+            .then((response) => response.ok ? response.json() : [])
+            .then((data) => { if (Array.isArray(data)) setProjects(data.map((item) => ({ id: item.id, name: item.name, desc: item.description, date: new Date(item.createdAt).toLocaleDateString() }))); })
+            .catch(() => undefined);
+    }, [userId]);
+
     const handleCreateProject = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) return;
-        const newProj = {
-            id: `proj-${Date.now()}`,
-            name: name.trim(),
-            desc: desc.trim() || 'New feature project',
-            date: 'Just now',
-        };
-        setProjects([newProj, ...projects]);
-        setName('');
-        setDesc('');
-        setShowModal(false);
-        showToast('New project created!', 'success');
+        if (!userId) return;
+        fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, name, description: desc }) })
+            .then(async (response) => {
+                if (!response.ok) throw new Error((await response.json()).error || 'Failed to create project');
+                return response.json();
+            })
+            .then((created) => {
+                setProjects((current) => [{ id: created.id, name: created.name, desc: created.description, date: 'Just now' }, ...current]);
+                setName(''); setDesc(''); setShowModal(false); showToast('New project created!', 'success');
+            })
+            .catch((error) => showToast(error instanceof Error ? error.message : 'Failed to create project', 'error'));
     };
 
     return (
         <div className="min-h-[calc(100vh-6rem)] flex flex-col justify-center items-center font-sans bg-[#0c0c0e] text-zinc-300 p-6 sm:p-12">
-            {projects.length === 0 ? (
+            {projects.length === 0 && repositories.length === 0 ? (
                 /* Empty Projects View (Exact Match of Image 1) */
                 <div className="max-w-xl mx-auto space-y-6 text-left">
                     {/* Isometric 3D Cubes Wireframe Icon Illustration */}
@@ -100,6 +110,18 @@ export default function ProjectsView({ onIngest, isIngesting }: ProjectsViewProp
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {repositories.map((repo) => (
+                            <div key={repo.id} className="p-5 rounded-2xl bg-[#141417] border border-blue-500/20 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <FolderGit2 className="w-4 h-4 text-blue-400 shrink-0" />
+                                        <h3 className="text-sm font-bold text-white truncate">{repo.fullName || repo.name || repo.url}</h3>
+                                    </div>
+                                    <span className="text-[10px] font-mono text-blue-400">INGESTED</span>
+                                </div>
+                                <p className="text-xs text-zinc-400 truncate">{repo.url}</p>
+                            </div>
+                        ))}
                         {projects.map((p) => (
                             <div key={p.id} className="p-5 rounded-2xl bg-[#141417] border border-white/10 space-y-2">
                                 <div className="flex items-center justify-between">
@@ -185,7 +207,7 @@ export default function ProjectsView({ onIngest, isIngesting }: ProjectsViewProp
                                 />
                                 <div className="flex justify-end gap-2 pt-2">
                                     <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 rounded-xl text-xs text-zinc-400">Cancel</button>
-                                    <button type="submit" className="px-4 py-2 rounded-xl bg-[#5e6ad2] text-white text-xs font-semibold">Create Project</button>
+                                     <button type="submit" disabled={!userId} className="px-4 py-2 rounded-xl bg-[#5e6ad2] text-white text-xs font-semibold disabled:opacity-50">Create Project</button>
                                 </div>
                             </form>
                         )}
@@ -195,4 +217,3 @@ export default function ProjectsView({ onIngest, isIngesting }: ProjectsViewProp
         </div>
     );
 }
-

@@ -44,18 +44,18 @@ export async function GET() {
     };
   }
 
-  // 3. LLM (Local Embedder)
+  // 3. AI services (OpenRouter embeddings + OpenCode Go completions)
   const llmStart = Date.now();
   try {
     const { embedQuery } = await import("@/lib/gemini");
     const vector = await embedQuery("health check");
     const latency = Date.now() - llmStart;
-    const hasVectors = vector && vector.length === 384;
+    const hasVectors = vector && vector.length === 1024;
     results.llm = {
       status: hasVectors ? "operational" : "degraded",
       latency,
       details: hasVectors
-        ? "Local Transformers.js embedder responding"
+        ? `1024-dimensional embeddings responding; OpenRouter ${process.env.OPENROUTER_API_KEY ? "configured" : "not configured"}; OpenCode Go ${process.env.OPENCODE_GO_API_KEY ? "configured" : "not configured"}`
         : "Invalid embedding dimensions returned",
     };
   } catch (err: unknown) {

@@ -34,8 +34,32 @@ CREATE TABLE "code_chunk" (
 	"start_line" integer NOT NULL,
 	"end_line" integer NOT NULL,
 	"language" text NOT NULL,
-	"embedding" vector(384),
+	"embedding_v2" vector(1024),
 	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "code_notes" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"repo_id" uuid,
+	"user_id" text NOT NULL,
+	"code" text NOT NULL,
+	"title" text NOT NULL,
+	"completed" boolean DEFAULT false NOT NULL,
+	"category" text DEFAULT 'logic' NOT NULL,
+	"assignee" text DEFAULT 'Unassigned' NOT NULL,
+	"date" text DEFAULT 'Today' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE "code_pages" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" text NOT NULL,
+	"repo_id" uuid,
+	"title" text DEFAULT 'Untitled Page' NOT NULL,
+	"content" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "pr_review" (
@@ -50,6 +74,15 @@ CREATE TABLE "pr_review" (
 	"file_reviews" jsonb,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "project" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" text NOT NULL,
+	"name" text NOT NULL,
+	"description" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "qa_history" (
@@ -175,8 +208,13 @@ ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("
 ALTER TABLE "activity_log" ADD CONSTRAINT "activity_log_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "activity_log" ADD CONSTRAINT "activity_log_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "code_chunk" ADD CONSTRAINT "code_chunk_repository_id_repository_id_fk" FOREIGN KEY ("repository_id") REFERENCES "public"."repository"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "code_notes" ADD CONSTRAINT "code_notes_repo_id_repository_id_fk" FOREIGN KEY ("repo_id") REFERENCES "public"."repository"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "code_notes" ADD CONSTRAINT "code_notes_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "code_pages" ADD CONSTRAINT "code_pages_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "code_pages" ADD CONSTRAINT "code_pages_repo_id_repository_id_fk" FOREIGN KEY ("repo_id") REFERENCES "public"."repository"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pr_review" ADD CONSTRAINT "pr_review_repository_id_repository_id_fk" FOREIGN KEY ("repository_id") REFERENCES "public"."repository"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pr_review" ADD CONSTRAINT "pr_review_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project" ADD CONSTRAINT "project_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "qa_history" ADD CONSTRAINT "qa_history_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "qa_history" ADD CONSTRAINT "qa_history_repository_id_repository_id_fk" FOREIGN KEY ("repository_id") REFERENCES "public"."repository"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "repository" ADD CONSTRAINT "repository_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -195,9 +233,14 @@ CREATE INDEX "activity_log_action_idx" ON "activity_log" USING btree ("action");
 CREATE INDEX "activity_log_created_at_idx" ON "activity_log" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "code_chunk_repository_id_idx" ON "code_chunk" USING btree ("repository_id");--> statement-breakpoint
 CREATE INDEX "code_chunk_file_path_idx" ON "code_chunk" USING btree ("file_path");--> statement-breakpoint
+CREATE INDEX "idx_code_notes_repo_id" ON "code_notes" USING btree ("repo_id");--> statement-breakpoint
+CREATE INDEX "idx_code_notes_user_id" ON "code_notes" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_code_pages_user_id" ON "code_pages" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_code_pages_repo_id" ON "code_pages" USING btree ("repo_id");--> statement-breakpoint
 CREATE INDEX "pr_review_repository_id_idx" ON "pr_review" USING btree ("repository_id");--> statement-breakpoint
 CREATE INDEX "pr_review_user_id_idx" ON "pr_review" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "pr_review_pr_number_idx" ON "pr_review" USING btree ("pr_number");--> statement-breakpoint
+CREATE INDEX "project_user_id_idx" ON "project" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "qa_history_user_id_idx" ON "qa_history" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "qa_history_repository_id_idx" ON "qa_history" USING btree ("repository_id");--> statement-breakpoint
 CREATE INDEX "repository_workspace_id_idx" ON "repository" USING btree ("workspace_id");--> statement-breakpoint

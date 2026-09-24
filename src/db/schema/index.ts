@@ -57,3 +57,5 @@ export {
   codePages,
   codePagesRelations,
 } from "./code-notes";
+
+export { project, projectRelations } from "./projects";
