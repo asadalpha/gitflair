@@ -1,6 +1,8 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from "next/image";
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X,
@@ -82,7 +84,8 @@ export default function GithubProfileModal({ isOpen, onClose, initialTab = 'prof
 
     useEffect(() => {
         if (isOpen) {
-            setActiveTab(initialTab);
+            const timer = setTimeout(() => setActiveTab(initialTab), 0);
+            return () => clearTimeout(timer);
         }
     }, [isOpen, initialTab]);
 
@@ -96,9 +99,11 @@ export default function GithubProfileModal({ isOpen, onClose, initialTab = 'prof
             if (cached) {
                 const parsed = JSON.parse(cached);
                 if (parsed && parsed.profile) {
+                    // eslint-disable-next-line react-hooks/set-state-in-effect
                     setGhData(parsed);
                     hasCache = true;
                     setLoading(false);
+                    // eslint-disable-next-line react-hooks/set-state-in-effect
                     setNeedsUsername(false);
                 }
             }

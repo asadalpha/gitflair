@@ -813,6 +813,7 @@ export default function Home() {
                                                     repoName={getRepoName(repo)}
                                                     repoUrl={repo?.url || ''}
                                                     languages={repo?.languagesJson || repo?.languages_json || null}
+                                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                                     analysis={(repo?.analysisJson as any) || (repo?.analysis_json as any) || null}
                                                     onFileClick={handleFileClick}
                                                 />

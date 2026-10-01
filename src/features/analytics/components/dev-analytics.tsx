@@ -1,6 +1,9 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from "next/image";
+import Link from "next/link";
 import {
     TrendingUp,
     GitCommit,
@@ -133,13 +136,12 @@ export default function DevAnalytics({ repoName, repoUrl }: DevAnalyticsProps) {
                     <AlertCircle className="w-8 h-8 text-amber-400" />
                     <p className="text-sm text-zinc-400">{error}</p>
                     {needsGithubLink ? (
-                        <a
-                            href="/api/auth/signin/github"
+                        <Link href="/api/auth/signin/github"
                             className="px-4 py-2 rounded-lg bg-[#1a1a1e] hover:bg-[#25252c] text-white text-xs font-medium flex items-center gap-2 border border-white/10 transition-colors"
                         >
                             <Github className="w-3.5 h-3.5" />
                             <span>Link GitHub Account</span>
-                        </a>
+                        </Link>
                     ) : (
                         <button
                             onClick={fetchAnalytics}

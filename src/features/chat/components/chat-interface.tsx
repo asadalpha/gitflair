@@ -104,7 +104,7 @@ export default function ChatInterface({ repoId, userId, onFileClick }: ChatInter
         setInput('');
         setMessages(prev => [...prev, { role: 'user', content: queryText }]);
         setIsLoading(true);
-        let firstTokenReceived = false;
+        const firstTokenReceived = false;
 
         const assistantIndex = messages.length + 1;
         setMessages(prev => [...prev, { role: 'assistant', content: '', chunks: undefined }]);

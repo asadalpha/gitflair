@@ -23,8 +23,8 @@ export default function AuthModal({
     const handleGoogleAuth = async () => {
         try {
             const res = await signIn.social({ provider: 'google', callbackURL: window.location.href });
-            if (res && (res as any).error) {
-                showToast((res as any).error.message || 'Google Sign-in failed', 'error');
+            if (res && (res as { error?: { message?: string } }).error) {
+                showToast((res as { error?: { message?: string } })?.error?.message || 'Google Sign-in failed', 'error');
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Google Sign-in failed';
@@ -35,8 +35,8 @@ export default function AuthModal({
     const handleGithubAuth = async () => {
         try {
             const res = await signIn.social({ provider: 'github', callbackURL: window.location.href });
-            if (res && (res as any).error) {
-                showToast((res as any).error.message || 'GitHub Sign-in failed', 'error');
+            if (res && (res as { error?: { message?: string } }).error) {
+                showToast((res as { error?: { message?: string } })?.error?.message || 'GitHub Sign-in failed', 'error');
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'GitHub Sign-in failed';

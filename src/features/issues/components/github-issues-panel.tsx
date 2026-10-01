@@ -87,6 +87,7 @@ export default function GithubIssuesPanel({ repoName = 'Repository', repoUrl, re
 
     useEffect(() => {
         fetchIssues();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [repoUrl, repoId]);
 
     const filteredIssues = issues.filter((issue) => {
