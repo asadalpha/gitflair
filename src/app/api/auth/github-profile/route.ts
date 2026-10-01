@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     const octokit = new Octokit(apiToken ? { auth: apiToken } : {});
 
     let username: string;
-    let ghUser: any;
+    let ghUser: { login: string; name?: string | null; avatar_url: string; bio?: string | null; company?: string | null; location?: string | null; blog?: string | null; followers: number; following: number; public_repos: number; created_at: string; [key: string]: unknown };
 
     if (userGhToken && !usernameParam) {
       const { data } = await octokit.rest.users.getAuthenticated();
