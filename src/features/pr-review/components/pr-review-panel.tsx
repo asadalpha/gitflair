@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     GitPullRequest,
@@ -120,15 +120,18 @@ export default function PRReviewPanel({ repoId, userId, onFileClick }: PRReviewP
         }
     };
 
-    const completedReviews = pastReviews.filter((review) => review.status === 'completed');
-    const reviewComments = completedReviews.flatMap((review) => review.fileReviews || []).flatMap((file) => file.comments || []);
-    const averageScore = completedReviews.length > 0
+    // ⚡ Bolt Optimization: Memoized expensive array operations (filter, map, flatMap, reduce)
+    // to prevent recalculating metrics on every keystroke when typing in the PR input
+    // or when changing active tabs. Reduces unnecessary re-renders.
+    const completedReviews = useMemo(() => pastReviews.filter((review) => review.status === 'completed'), [pastReviews]);
+    const reviewComments = useMemo(() => completedReviews.flatMap((review) => review.fileReviews || []).flatMap((file) => file.comments || []), [completedReviews]);
+    const averageScore = useMemo(() => completedReviews.length > 0
         ? completedReviews.reduce((sum, review) => sum + (review.score || 0), 0) / completedReviews.length
-        : 0;
-    const severityCounts = ['error', 'warning', 'info'].map((type) => ({
+        : 0, [completedReviews]);
+    const severityCounts = useMemo(() => ['error', 'warning', 'info'].map((type) => ({
         name: type.toUpperCase(),
         count: reviewComments.filter((comment) => comment.type === type).length,
-    }));
+    })), [reviewComments]);
 
     return (
         <div className="space-y-6 font-sans text-xs text-zinc-300 max-w-7xl mx-auto">
