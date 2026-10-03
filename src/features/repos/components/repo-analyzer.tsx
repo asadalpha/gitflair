@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import GitPixel from '@/components/ui/git-pixel';
 import { 
@@ -74,18 +74,23 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
     const [copiedItem, setCopiedItem] = useState<number | null>(null);
 
     // Calculate language percentages from GitHub's repository language totals.
-    const langDetails = languages ? Object.entries(languages) : [];
-    const totalLines = langDetails.reduce((sum, [, val]) => sum + val, 0);
-    const languagesSorted = totalLines > 0
-        ? langDetails
-            .map(([name, lines]) => ({
-                name,
-                lines: `${lines.toLocaleString()} bytes`,
-                percentage: (lines / totalLines) * 100,
-                color: LANGUAGE_COLORS[name] || '#8b5cf6',
-            }))
-            .sort((a, b) => b.percentage - a.percentage)
-        : [];
+    const langDetails = useMemo(() => languages ? Object.entries(languages) : [], [languages]);
+    const totalLines = useMemo(() => langDetails.reduce((sum, [, val]) => sum + val, 0), [langDetails]);
+
+    // ⚡ Bolt Optimization: Memoize language sorting and percentage calculation
+    // Impact: Prevents O(N log N) sorting and object mapping on every render
+    const languagesSorted = useMemo(() => {
+        return totalLines > 0
+            ? langDetails
+                .map(([name, lines]) => ({
+                    name,
+                    lines: `${lines.toLocaleString()} bytes`,
+                    percentage: (lines / totalLines) * 100,
+                    color: LANGUAGE_COLORS[name] || '#8b5cf6',
+                }))
+                .sort((a, b) => b.percentage - a.percentage)
+            : [];
+    }, [langDetails, totalLines]);
 
     const copyToClipboard = (text: string, type: 'summary' | number) => {
         navigator.clipboard.writeText(text);
@@ -98,15 +103,7 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
         }
     };
 
-    if (!analysis) {
-        return (
-            <div className="rounded-xl border border-white/[0.08] bg-[#121215] p-12 text-center text-zinc-400 min-h-[300px] flex flex-col items-center justify-center space-y-3">
-                <Sparkles className="w-5 h-5 text-zinc-400 animate-pulse" />
-                <h3 className="text-xs font-medium text-zinc-200">Analyzing Repository Architecture...</h3>
-                <p className="text-[11px] text-zinc-500 max-w-sm">Indexing directory tree and compiling architecture overview.</p>
-            </div>
-        );
-    }
+
 
     const formatArchText = (text: string) => {
         if (!text) return 'Architecture analysis pending...';
@@ -130,19 +127,37 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
         });
     };
 
-    const rawImprovements = analysis.improvements || [];
+    const rawImprovements = useMemo(() => analysis?.improvements || [], [analysis?.improvements]);
 
-    const filteredImprovements = rawImprovements.filter((imp) => {
-        if (filterCategory === 'ALL') return true;
-        const category = imp.type || 'ARCHITECTURE';
-        return category === filterCategory;
-    });
+    // ⚡ Bolt Optimization: Memoize array filtering
+    // Impact: Prevents unnecessary O(N) array iteration when component state updates (like copied tooltips)
+    const filteredImprovements = useMemo(() => {
+        return rawImprovements.filter((imp) => {
+            if (filterCategory === 'ALL') return true;
+            const category = imp.type || 'ARCHITECTURE';
+            return category === filterCategory;
+        });
+    }, [rawImprovements, filterCategory]);
 
-    const categoryCounts = Object.entries(rawImprovements.reduce<Record<string, number>>((counts, improvement) => {
-        const category = improvement.type || 'ARCHITECTURE';
-        counts[category] = (counts[category] || 0) + 1;
-        return counts;
-    }, {})).map(([name, count]) => ({ name, count }));
+    // ⚡ Bolt Optimization: Memoize category aggregations
+    // Impact: Saves O(N) reduction + Object.entries parsing on every render
+    const categoryCounts = useMemo(() => {
+        return Object.entries(rawImprovements.reduce<Record<string, number>>((counts, improvement) => {
+            const category = improvement.type || 'ARCHITECTURE';
+            counts[category] = (counts[category] || 0) + 1;
+            return counts;
+        }, {})).map(([name, count]) => ({ name, count }));
+    }, [rawImprovements]);
+
+    if (!analysis) {
+        return (
+            <div className="rounded-xl border border-white/[0.08] bg-[#121215] p-12 text-center text-zinc-400 min-h-[300px] flex flex-col items-center justify-center space-y-3">
+                <Sparkles className="w-5 h-5 text-zinc-400 animate-pulse" />
+                <h3 className="text-xs font-medium text-zinc-200">Analyzing Repository Architecture...</h3>
+                <p className="text-[11px] text-zinc-500 max-w-sm">Indexing directory tree and compiling architecture overview.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 font-sans text-zinc-100 pb-8 max-w-7xl mx-auto">
