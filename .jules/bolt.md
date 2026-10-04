@@ -1,0 +1,3 @@
+## 2026-10-04 - [Memoizing derived state above early returns]
+**Learning:** [When identifying heavy derived state for memoization in React, you must be careful if the component has early returns (like loading states). Using optional chaining or default fallbacks allows you to safely place `useMemo` hooks before early returns, thereby obeying the Rules of Hooks while avoiding runtime errors on null data.]
+**Action:** [Always check for early returns when adding hooks to existing functional components. Use fallbacks or optional chaining to decouple hook execution from conditional rendering logic.]

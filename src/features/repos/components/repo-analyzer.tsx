@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import GitPixel from '@/components/ui/git-pixel';
 import { 
@@ -74,18 +74,21 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
     const [copiedItem, setCopiedItem] = useState<number | null>(null);
 
     // Calculate language percentages from GitHub's repository language totals.
-    const langDetails = languages ? Object.entries(languages) : [];
-    const totalLines = langDetails.reduce((sum, [, val]) => sum + val, 0);
-    const languagesSorted = totalLines > 0
-        ? langDetails
-            .map(([name, lines]) => ({
-                name,
-                lines: `${lines.toLocaleString()} bytes`,
-                percentage: (lines / totalLines) * 100,
-                color: LANGUAGE_COLORS[name] || '#8b5cf6',
-            }))
-            .sort((a, b) => b.percentage - a.percentage)
-        : [];
+    const { langDetails, totalLines, languagesSorted } = useMemo(() => {
+        const details = languages ? Object.entries(languages) : [];
+        const lines = details.reduce((sum, [, val]) => sum + val, 0);
+        const sorted = lines > 0
+            ? details
+                .map(([name, val]) => ({
+                    name,
+                    lines: `${val.toLocaleString()} bytes`,
+                    percentage: (val / lines) * 100,
+                    color: LANGUAGE_COLORS[name] || '#8b5cf6',
+                }))
+                .sort((a, b) => b.percentage - a.percentage)
+            : [];
+        return { langDetails: details, totalLines: lines, languagesSorted: sorted };
+    }, [languages]);
 
     const copyToClipboard = (text: string, type: 'summary' | number) => {
         navigator.clipboard.writeText(text);
@@ -97,6 +100,24 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
             setTimeout(() => setCopiedItem(null), 2000);
         }
     };
+
+    const rawImprovements = useMemo(() => analysis?.improvements || [], [analysis?.improvements]);
+
+    const filteredImprovements = useMemo(() => {
+        return rawImprovements.filter((imp) => {
+            if (filterCategory === 'ALL') return true;
+            const category = imp.type || 'ARCHITECTURE';
+            return category === filterCategory;
+        });
+    }, [rawImprovements, filterCategory]);
+
+    const categoryCounts = useMemo(() => {
+        return Object.entries(rawImprovements.reduce<Record<string, number>>((counts, improvement) => {
+            const category = improvement.type || 'ARCHITECTURE';
+            counts[category] = (counts[category] || 0) + 1;
+            return counts;
+        }, {})).map(([name, count]) => ({ name, count }));
+    }, [rawImprovements]);
 
     if (!analysis) {
         return (
@@ -129,20 +150,6 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
             return <span key={idx}>{part}</span>;
         });
     };
-
-    const rawImprovements = analysis.improvements || [];
-
-    const filteredImprovements = rawImprovements.filter((imp) => {
-        if (filterCategory === 'ALL') return true;
-        const category = imp.type || 'ARCHITECTURE';
-        return category === filterCategory;
-    });
-
-    const categoryCounts = Object.entries(rawImprovements.reduce<Record<string, number>>((counts, improvement) => {
-        const category = improvement.type || 'ARCHITECTURE';
-        counts[category] = (counts[category] || 0) + 1;
-        return counts;
-    }, {})).map(([name, count]) => ({ name, count }));
 
     return (
         <div className="space-y-6 font-sans text-zinc-100 pb-8 max-w-7xl mx-auto">
