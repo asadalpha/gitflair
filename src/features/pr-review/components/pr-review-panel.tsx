@@ -283,7 +283,7 @@ export default function PRReviewPanel({ repoId, userId, onFileClick }: PRReviewP
                         <div>{pastReviews.length} total records</div>
                     </div>
 
-                    <div className="text-center text-zinc-500 font-mono text-[11px]">Source: this repository's review history.</div>
+                    <div className="text-center text-zinc-500 font-mono text-[11px]">Source: this repository&apos;s review history.</div>
                 </div>
             </div>
 

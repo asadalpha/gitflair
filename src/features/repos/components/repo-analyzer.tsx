@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import GitPixel from '@/components/ui/git-pixel';
 import { 
@@ -73,19 +73,46 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
     const [copiedSummary, setCopiedSummary] = useState(false);
     const [copiedItem, setCopiedItem] = useState<number | null>(null);
 
+    // ⚡ Bolt Performance Optimization:
+    // Memoize the languages array formatting and sorting since they iterate over object entries and
+    // perform sorting, which could be O(N log N) in the number of detected languages.
     // Calculate language percentages from GitHub's repository language totals.
-    const langDetails = languages ? Object.entries(languages) : [];
-    const totalLines = langDetails.reduce((sum, [, val]) => sum + val, 0);
-    const languagesSorted = totalLines > 0
-        ? langDetails
-            .map(([name, lines]) => ({
-                name,
-                lines: `${lines.toLocaleString()} bytes`,
-                percentage: (lines / totalLines) * 100,
-                color: LANGUAGE_COLORS[name] || '#8b5cf6',
-            }))
-            .sort((a, b) => b.percentage - a.percentage)
-        : [];
+    const langDetails = useMemo(() => languages ? Object.entries(languages) : [], [languages]);
+    const totalLines = useMemo(() => langDetails.reduce((sum, [, val]) => sum + val, 0), [langDetails]);
+    const languagesSorted = useMemo(() => {
+        return totalLines > 0
+            ? langDetails
+                .map(([name, lines]) => ({
+                    name,
+                    lines: `${lines.toLocaleString()} bytes`,
+                    percentage: (lines / totalLines) * 100,
+                    color: LANGUAGE_COLORS[name] || '#8b5cf6',
+                }))
+                .sort((a, b) => b.percentage - a.percentage)
+            : [];
+    }, [langDetails, totalLines]);
+
+    // ⚡ Bolt Performance Optimization:
+    // Memoizing improvements derived state (filtering and category reduction).
+    // Filtering iterates through the items, reducing iterates and builds an object then maps it.
+    // This prevents recalculations on unrelated state updates like copying to clipboard.
+    const rawImprovements = useMemo(() => analysis?.improvements || [], [analysis?.improvements]);
+
+    const filteredImprovements = useMemo(() => {
+        return rawImprovements.filter((imp) => {
+            if (filterCategory === 'ALL') return true;
+            const category = imp.type || 'ARCHITECTURE';
+            return category === filterCategory;
+        });
+    }, [rawImprovements, filterCategory]);
+
+    const categoryCounts = useMemo(() => {
+        return Object.entries(rawImprovements.reduce<Record<string, number>>((counts, improvement) => {
+            const category = improvement.type || 'ARCHITECTURE';
+            counts[category] = (counts[category] || 0) + 1;
+            return counts;
+        }, {})).map(([name, count]) => ({ name, count }));
+    }, [rawImprovements]);
 
     const copyToClipboard = (text: string, type: 'summary' | number) => {
         navigator.clipboard.writeText(text);
@@ -129,20 +156,6 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
             return <span key={idx}>{part}</span>;
         });
     };
-
-    const rawImprovements = analysis.improvements || [];
-
-    const filteredImprovements = rawImprovements.filter((imp) => {
-        if (filterCategory === 'ALL') return true;
-        const category = imp.type || 'ARCHITECTURE';
-        return category === filterCategory;
-    });
-
-    const categoryCounts = Object.entries(rawImprovements.reduce<Record<string, number>>((counts, improvement) => {
-        const category = improvement.type || 'ARCHITECTURE';
-        counts[category] = (counts[category] || 0) + 1;
-        return counts;
-    }, {})).map(([name, count]) => ({ name, count }));
 
     return (
         <div className="space-y-6 font-sans text-zinc-100 pb-8 max-w-7xl mx-auto">

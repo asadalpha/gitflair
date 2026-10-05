@@ -162,7 +162,7 @@ export async function getOrCreateUserAndWorkspace(
 }
 
 export async function requireWorkspace(userId: string) {
-  let userWorkspace = await getUserWorkspace(userId);
+  const userWorkspace = await getUserWorkspace(userId);
   if (!userWorkspace) {
     const { workspace: createdWs } = await getOrCreateUserAndWorkspace(userId);
     return { workspace: createdWs, role: "owner" };
