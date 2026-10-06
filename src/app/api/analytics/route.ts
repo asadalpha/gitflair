@@ -64,135 +64,147 @@ export async function POST(request: NextRequest) {
 
     if (owner && repoName) {
       const repoParts: { number: number; title: string; state: string; created_at: string; html_url: string; merged_at: string | null }[] = [];
-      try {
-        const { data: repoPRs } = await octokit.rest.pulls.list({
-          owner,
-          repo: repoName,
-          state: "all",
-          per_page: 50,
-          sort: "created",
-          direction: "desc",
-        });
-        for (const pr of repoPRs) {
-          prs.push({
-            number: pr.number,
-            title: pr.title,
-            state: pr.merged_at ? "merged" : pr.state,
-            createdAt: pr.created_at,
-            url: pr.html_url,
-          });
-          repoParts.push({
-            number: pr.number,
-            title: pr.title,
-            state: pr.merged_at ? "merged" : pr.state,
-            created_at: pr.created_at,
-            html_url: pr.html_url,
-            merged_at: pr.merged_at,
-          });
-          if (pr.merged_at && pr.created_at) {
-            const diff = new Date(pr.merged_at).getTime() - new Date(pr.created_at).getTime();
-            mergeTimes.push(diff / 3_600_000);
+      await Promise.all([
+        (async () => {
+          try {
+            const { data: repoPRs } = await octokit.rest.pulls.list({
+              owner,
+              repo: repoName,
+              state: "all",
+              per_page: 50,
+              sort: "created",
+              direction: "desc",
+            });
+            for (const pr of repoPRs) {
+              prs.push({
+                number: pr.number,
+                title: pr.title,
+                state: pr.merged_at ? "merged" : pr.state,
+                createdAt: pr.created_at,
+                url: pr.html_url,
+              });
+              repoParts.push({
+                number: pr.number,
+                title: pr.title,
+                state: pr.merged_at ? "merged" : pr.state,
+                created_at: pr.created_at,
+                html_url: pr.html_url,
+                merged_at: pr.merged_at,
+              });
+              if (pr.merged_at && pr.created_at) {
+                const diff = new Date(pr.merged_at).getTime() - new Date(pr.created_at).getTime();
+                mergeTimes.push(diff / 3_600_000);
+              }
+            }
+          } catch (e) {
+            console.error("PR fetch failed:", e);
           }
-        }
-      } catch (e) {
-        console.error("PR fetch failed:", e);
-      }
-
-      try {
-        const { data: repoIssues } = await octokit.rest.issues.listForRepo({
-          owner,
-          repo: repoName,
-          state: "all",
-          per_page: 50,
-          sort: "created",
-          direction: "desc",
-        });
-        for (const iss of repoIssues) {
-          if (iss.pull_request) continue;
-          issues.push({
-            number: iss.number,
-            title: iss.title,
-            state: iss.state,
-            createdAt: iss.created_at,
-            url: iss.html_url,
-            labels: iss.labels.map((l) => (typeof l === "string" ? l : l.name ?? "")).filter(Boolean),
-          });
-        }
-      } catch (e) {
-        console.error("Issue fetch failed:", e);
-      }
-
-      try {
-        const { data: contributors } = await octokit.rest.repos.listContributors({
-          owner,
-          repo: repoName,
-          per_page: 100,
-        });
-        const me = contributors.find((c) => c.login === username);
-        commits = me?.contributions ?? 0;
-      } catch (e) {
-        console.error("Contributors fetch failed:", e);
-      }
+        })(),
+        (async () => {
+          try {
+            const { data: repoIssues } = await octokit.rest.issues.listForRepo({
+              owner,
+              repo: repoName,
+              state: "all",
+              per_page: 50,
+              sort: "created",
+              direction: "desc",
+            });
+            for (const iss of repoIssues) {
+              if (iss.pull_request) continue;
+              issues.push({
+                number: iss.number,
+                title: iss.title,
+                state: iss.state,
+                createdAt: iss.created_at,
+                url: iss.html_url,
+                labels: iss.labels.map((l) => (typeof l === "string" ? l : l.name ?? "")).filter(Boolean),
+              });
+            }
+          } catch (e) {
+            console.error("Issue fetch failed:", e);
+          }
+        })(),
+        (async () => {
+          try {
+            const { data: contributors } = await octokit.rest.repos.listContributors({
+              owner,
+              repo: repoName,
+              per_page: 100,
+            });
+            const me = contributors.find((c) => c.login === username);
+            commits = me?.contributions ?? 0;
+          } catch (e) {
+            console.error("Contributors fetch failed:", e);
+          }
+        })()
+      ]);
     } else {
-      try {
-        const { data: events } = await octokit.rest.activity.listEventsForAuthenticatedUser({
-          username,
-          per_page: 100,
-        });
-        for (const ev of events) {
-          if (ev.type === "PushEvent") {
-            commits += (ev.payload as { commits?: unknown[] }).commits?.length ?? 1;
+      await Promise.all([
+        (async () => {
+          try {
+            const { data: events } = await octokit.rest.activity.listEventsForAuthenticatedUser({
+              username,
+              per_page: 100,
+            });
+            for (const ev of events) {
+              if (ev.type === "PushEvent") {
+                commits += (ev.payload as { commits?: unknown[] }).commits?.length ?? 1;
+              }
+            }
+          } catch {
+            // ignore
           }
-        }
-      } catch {
-        // ignore
-      }
-
-      try {
-        const { data: userPRs } = await octokit.rest.search.issuesAndPullRequests({
-          q: `author:${username} is:pr`,
-          per_page: 30,
-          sort: "created",
-          order: "desc",
-        });
-        for (const pr of userPRs.items) {
-          const isMerged = pr.state === "closed" && !!pr.pull_request;
-          prs.push({
-            number: pr.number,
-            title: pr.title,
-            state: isMerged ? "merged" : pr.state ?? "open",
-            createdAt: pr.created_at,
-            url: pr.html_url,
-          });
-          if (isMerged && pr.closed_at && pr.created_at) {
-            const diff = new Date(pr.closed_at).getTime() - new Date(pr.created_at).getTime();
-            mergeTimes.push(diff / 3_600_000);
+        })(),
+        (async () => {
+          try {
+            const { data: userPRs } = await octokit.rest.search.issuesAndPullRequests({
+              q: `author:${username} is:pr`,
+              per_page: 30,
+              sort: "created",
+              order: "desc",
+            });
+            for (const pr of userPRs.items) {
+              const isMerged = pr.state === "closed" && !!pr.pull_request;
+              prs.push({
+                number: pr.number,
+                title: pr.title,
+                state: isMerged ? "merged" : pr.state ?? "open",
+                createdAt: pr.created_at,
+                url: pr.html_url,
+              });
+              if (isMerged && pr.closed_at && pr.created_at) {
+                const diff = new Date(pr.closed_at).getTime() - new Date(pr.created_at).getTime();
+                mergeTimes.push(diff / 3_600_000);
+              }
+            }
+          } catch (e) {
+            console.error("PR search failed:", e);
           }
-        }
-      } catch (e) {
-        console.error("PR search failed:", e);
-      }
-
-      try {
-        const { data: userIssues } = await octokit.rest.search.issuesAndPullRequests({
-          q: `author:${username} is:issue`,
-          per_page: 30,
-          sort: "created",
-          order: "desc",
-        });
-        for (const iss of userIssues.items) {
-          issues.push({
-            number: iss.number,
-            title: iss.title,
-            state: iss.state ?? "open",
-            createdAt: iss.created_at,
-            url: iss.html_url,
-            labels: iss.labels.map((l) => (typeof l === "string" ? l : l.name ?? "")).filter(Boolean),
-          });
-        }
-      } catch (e) {
-        console.error("Issue search failed:", e);
-      }
+        })(),
+        (async () => {
+          try {
+            const { data: userIssues } = await octokit.rest.search.issuesAndPullRequests({
+              q: `author:${username} is:issue`,
+              per_page: 30,
+              sort: "created",
+              order: "desc",
+            });
+            for (const iss of userIssues.items) {
+              issues.push({
+                number: iss.number,
+                title: iss.title,
+                state: iss.state ?? "open",
+                createdAt: iss.created_at,
+                url: iss.html_url,
+                labels: iss.labels.map((l) => (typeof l === "string" ? l : l.name ?? "")).filter(Boolean),
+              });
+            }
+          } catch (e) {
+            console.error("Issue search failed:", e);
+          }
+        })()
+      ]);
     }
 
     const avgMergeHours = mergeTimes.length > 0
