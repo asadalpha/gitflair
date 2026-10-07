@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     Send,
     Loader2,
@@ -43,6 +43,10 @@ interface ChatInterfaceProps {
     repoUrl?: string;
     onFileClick: (path: string) => void;
 }
+
+const MemoizedMarkdown = React.memo(function MemoizedMarkdown({ content }: { content: string }) {
+    return <ReactMarkdown>{content}</ReactMarkdown>;
+});
 
 const SUGGESTED_PROMPTS = [
     { icon: <Zap className="w-3.5 h-3.5 text-amber-400" />, title: 'Performance Bottlenecks', prompt: 'Where are the potential performance bottlenecks or unindexed DB queries?' },
@@ -292,7 +296,7 @@ export default function ChatInterface({ repoId, userId, onFileClick }: ChatInter
                             }`}>
                                 {m.role === 'assistant' ? (
                                     <div className="prose prose-invert prose-xs max-w-none text-xs leading-relaxed font-sans">
-                                        <ReactMarkdown>{m.content}</ReactMarkdown>
+                                        <MemoizedMarkdown content={m.content} />
                                     </div>
                                 ) : (
                                     <p className="text-xs leading-relaxed font-normal">{m.content}</p>
