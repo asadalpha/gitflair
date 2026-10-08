@@ -1,0 +1,3 @@
+## 2026-10-08 - [O(n²) Array Mapping in Next.js Serverless Route]
+**Learning:** In `src/app/api/ingest/route.ts`, embedding generation chunking iterated over string contents mapped from objects, and mapped these string chunks to embed values while finding the associated metadata block by string comparison via a `.find()` lookup inside the `.map()`. In deep arrays, this nested search structure creates an O(n²) time complexity.
+**Action:** When filtering objects into mapped values for API calls, maintain the filtered array of initial objects instead. Iterate over this object array directly to build subsequent structured output, guaranteeing an O(n) iteration time rather than falling back on string or ID lookups on each map step.
