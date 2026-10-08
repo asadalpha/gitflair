@@ -128,38 +128,28 @@ export async function POST(req: NextRequest) {
         fileBatch.map(async (file) => {
           const chunks = await chunkCode(file.content, file.path);
 
-          const chunkContents = chunks
-            .map((c: { content: string }) => c.content)
-            .filter((content: string) => content.trim().length > 0);
+          // ⚡ Bolt: Performance optimization
+          // Filter valid chunks first to avoid O(n²) nested .find() on every mapping iteration
+          const validChunks = chunks.filter((c: { content: string }) => c.content.trim().length > 0);
 
-          if (chunkContents.length === 0) return;
+          if (validChunks.length === 0) return;
 
+          const chunkContents = validChunks.map((c: { content: string }) => c.content);
           const chunkEmbeddings = await embedDocuments(chunkContents);
 
-          const chunksWithEmbeddings = chunkContents
-            .map(
-              (
-                content: string,
-                index: number,
-              ) => {
-                const originalChunk = chunks.find(
-                  (c: { content: string }) => c.content === content,
-                ) || chunks[0];
-                return {
-                  repositoryId: repoId,
-                  filePath: file.path,
-                  content,
-                  startLine: originalChunk.start_line,
-                  endLine: originalChunk.end_line,
-                  language: file.language,
-                  embedding: chunkEmbeddings[index],
-                };
-              },
-            )
-            .filter(
-              (c: { embedding: number[] }) =>
-                c.embedding && c.embedding.length > 0,
-            );
+          const chunksWithEmbeddings = validChunks
+            .map((chunk: { content: string; start_line: number; end_line: number }, index: number) => {
+              return {
+                repositoryId: repoId,
+                filePath: file.path,
+                content: chunk.content,
+                startLine: chunk.start_line,
+                endLine: chunk.end_line,
+                language: file.language,
+                embedding: chunkEmbeddings[index],
+              };
+            })
+            .filter((c: { embedding: number[] }) => c.embedding && c.embedding.length > 0);
 
           if (chunksWithEmbeddings.length === 0) return;
 
