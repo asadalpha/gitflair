@@ -1,0 +1,3 @@
+## 2023-10-10 - ReactMarkdown Re-render Optimization
+**Learning:** During active streaming in chat interfaces, updating the `messages` array triggers re-renders for the entire message list. Unmemoized `ReactMarkdown` components re-parse and re-render the same unchanging string content on every single new token chunk, causing significant performance degradation and input lag in long conversations.
+**Action:** Always wrap expensive rendering components like `ReactMarkdown` in `React.memo` (at the module level) when used inside lists that update frequently. Ensure only primitive props (like the markdown string) are passed to rely on shallow equality checks.
