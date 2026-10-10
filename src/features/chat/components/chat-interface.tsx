@@ -21,7 +21,13 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
+import { memo } from 'react';
 import { showToast } from '@/components/ui/toast';
+
+// ⚡ Bolt Performance Optimization
+// Memoizing ReactMarkdown prevents expensive re-parsing of markdown and re-rendering
+// of older messages when new tokens stream in and update the messages array state.
+const MemoizedReactMarkdown = memo(ReactMarkdown);
 
 interface Chunk {
     file_path: string;
@@ -292,7 +298,7 @@ export default function ChatInterface({ repoId, userId, onFileClick }: ChatInter
                             }`}>
                                 {m.role === 'assistant' ? (
                                     <div className="prose prose-invert prose-xs max-w-none text-xs leading-relaxed font-sans">
-                                        <ReactMarkdown>{m.content}</ReactMarkdown>
+                                        <MemoizedReactMarkdown>{m.content}</MemoizedReactMarkdown>
                                     </div>
                                 ) : (
                                     <p className="text-xs leading-relaxed font-normal">{m.content}</p>
