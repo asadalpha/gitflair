@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import GitPixel from '@/components/ui/git-pixel';
 import { 
@@ -73,19 +73,42 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
     const [copiedSummary, setCopiedSummary] = useState(false);
     const [copiedItem, setCopiedItem] = useState<number | null>(null);
 
-    // Calculate language percentages from GitHub's repository language totals.
-    const langDetails = languages ? Object.entries(languages) : [];
-    const totalLines = langDetails.reduce((sum, [, val]) => sum + val, 0);
-    const languagesSorted = totalLines > 0
-        ? langDetails
-            .map(([name, lines]) => ({
-                name,
-                lines: `${lines.toLocaleString()} bytes`,
-                percentage: (lines / totalLines) * 100,
-                color: LANGUAGE_COLORS[name] || '#8b5cf6',
-            }))
-            .sort((a, b) => b.percentage - a.percentage)
-        : [];
+    // ⚡ Bolt Optimization: Memoize language percentage calculations
+    // What: Wrapped expensive language stats calculation in useMemo
+    // Why: Prevents recalculating array mappings/reductions/sorts on every render
+    // Impact: Avoids O(N log N) sorting and multiple O(N) iterations on each re-render
+    const { languagesSorted, totalLanguages, totalLines } = useMemo(() => {
+        const langDetails = languages ? Object.entries(languages) : [];
+        const totalLines = langDetails.reduce((sum, [, val]) => sum + val, 0);
+        const languagesSorted = totalLines > 0
+            ? langDetails
+                .map(([name, lines]) => ({
+                    name,
+                    lines: `${lines.toLocaleString()} bytes`,
+                    percentage: (lines / totalLines) * 100,
+                    color: LANGUAGE_COLORS[name] || '#8b5cf6',
+                }))
+                .sort((a, b) => b.percentage - a.percentage)
+            : [];
+        return {
+            languagesSorted,
+            totalLanguages: langDetails.length,
+            totalLines,
+        };
+    }, [languages]);
+
+    // ⚡ Bolt Optimization: Memoize improvement filtering
+    // What: Wrapped the filter operation for improvements in useMemo
+    // Why: Prevents re-running O(N) filtering across potentially many improvement items on every state change (except filterCategory)
+    // Impact: Improves UI responsiveness when user clicks around without changing the category
+    const filteredImprovements = useMemo(() => {
+        const rawImprovements = analysis?.improvements || [];
+        return rawImprovements.filter((imp) => {
+            if (filterCategory === 'ALL') return true;
+            const category = imp.type || 'ARCHITECTURE';
+            return category === filterCategory;
+        });
+    }, [analysis?.improvements, filterCategory]);
 
     const copyToClipboard = (text: string, type: 'summary' | number) => {
         navigator.clipboard.writeText(text);
@@ -131,12 +154,6 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
     };
 
     const rawImprovements = analysis.improvements || [];
-
-    const filteredImprovements = rawImprovements.filter((imp) => {
-        if (filterCategory === 'ALL') return true;
-        const category = imp.type || 'ARCHITECTURE';
-        return category === filterCategory;
-    });
 
     const categoryCounts = Object.entries(rawImprovements.reduce<Record<string, number>>((counts, improvement) => {
         const category = improvement.type || 'ARCHITECTURE';
@@ -199,7 +216,7 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
 
             {/* Top KPI Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono">
-                <MetricCard title="LANGUAGES DETECTED" value={String(langDetails.length)} unit="LANGUAGES" />
+                <MetricCard title="LANGUAGES DETECTED" value={String(totalLanguages)} unit="LANGUAGES" />
                 <MetricCard title="LANGUAGE DATA" value={totalLines.toLocaleString()} unit="BYTES" />
                 <MetricCard title="AI IMPROVEMENTS" value={String(rawImprovements.length)} unit="FINDINGS" />
                 <MetricCard title="INDEX STATUS" value="COMPLETE" unit="REPOSITORY" />
