@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { motion } from 'framer-motion';
 import GitPixel from '@/components/ui/git-pixel';
 import { 
@@ -399,7 +399,7 @@ export default function RepoAnalyzer({ repoName, repoUrl, languages, analysis, o
     );
 }
 
-function MetricCard({ title, value, unit }: { title: string; value: string; unit?: string }) {
+const MetricCard = memo(function MetricCard({ title, value, unit }: { title: string; value: string; unit?: string }) {
     return (
         <div className="rounded-xl bg-[#0f0f13] border border-white/[0.08] p-4 space-y-2 flex flex-col justify-between font-mono">
             <div className="flex items-center justify-between">
@@ -412,4 +412,4 @@ function MetricCard({ title, value, unit }: { title: string; value: string; unit
             </div>
         </div>
     );
-}
+});

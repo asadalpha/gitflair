@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 
 interface GitPixelProps {
     seed: string;
@@ -16,9 +16,10 @@ function djb2Hash(str: string): number {
     return Math.abs(hash);
 }
 
-export default function GitPixel({ seed, size = 120 }: GitPixelProps) {
+const GitPixel = memo(function GitPixel({ seed, size = 120 }: GitPixelProps) {
+    const hash = useMemo(() => djb2Hash(seed), [seed]);
+
     const grid = useMemo(() => {
-        const hash = djb2Hash(seed);
         const cells: boolean[][] = Array(8).fill(null).map(() => Array(8).fill(false));
 
         for (let y = 0; y < 8; y++) {
@@ -31,10 +32,9 @@ export default function GitPixel({ seed, size = 120 }: GitPixelProps) {
             }
         }
         return cells;
-    }, [seed]);
+    }, [hash]);
 
     const colors = useMemo(() => {
-        const hash = djb2Hash(seed);
         const hue = hash % 360;
         const saturation = 70 + (hash % 20); // 70% to 90%
         const lightness = 45 + (hash % 15); // 45% to 60%
@@ -44,7 +44,7 @@ export default function GitPixel({ seed, size = 120 }: GitPixelProps) {
             foreground: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
             glow: `hsl(${hue}, ${saturation}%, ${lightness}%, 0.4)`,
         };
-    }, [seed]);
+    }, [hash]);
 
     const pixelSize = size / 8;
 
@@ -65,7 +65,7 @@ export default function GitPixel({ seed, size = 120 }: GitPixelProps) {
                 xmlns="http://www.w3.org/2000/svg"
             >
                 <defs>
-                    <filter id={`glow-${djb2Hash(seed)}`} x="-20%" y="-20%" width="140%" height="140%">
+                    <filter id={`glow-${hash}`} x="-20%" y="-20%" width="140%" height="140%">
                         <feGaussianBlur stdDeviation="2" result="blur" />
                         <feMerge>
                             <feMergeNode in="blur" />
@@ -73,7 +73,7 @@ export default function GitPixel({ seed, size = 120 }: GitPixelProps) {
                         </feMerge>
                     </filter>
                 </defs>
-                <g filter={`url(#glow-${djb2Hash(seed)})`}>
+                <g filter={`url(#glow-${hash})`}>
                     {grid.map((row, y) =>
                         row.map((active, x) => {
                             if (!active) return null;
@@ -94,4 +94,6 @@ export default function GitPixel({ seed, size = 120 }: GitPixelProps) {
             </svg>
         </div>
     );
-}
+});
+
+export default GitPixel;
