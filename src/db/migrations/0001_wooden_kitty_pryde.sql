@@ -1,0 +1,1 @@
+CREATE INDEX "code_chunk_embedding_idx" ON "code_chunk" USING hnsw ("embedding_v2" vector_cosine_ops);
