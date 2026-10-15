@@ -32,6 +32,11 @@ export const codeChunk = pgTable(
   (table) => [
     index("code_chunk_repository_id_idx").on(table.repositoryId),
     index("code_chunk_file_path_idx").on(table.filePath),
+
+    // ⚡ Bolt Optimization: Added HNSW index for vector_cosine_ops.
+    // Why: Prevents full sequential scans during semantic search in pgvector.
+    // Impact: Reduces vector search time complexity from O(N) to O(log N).
+    index("code_chunk_embedding_idx").using("hnsw", table.embedding.op("vector_cosine_ops")),
   ],
 );
 
